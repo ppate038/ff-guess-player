@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+output/
+*.mp4
+*.png
+client_secrets.json
+token.json
+.coverage
+htmlcov/
+dist/
+*.egg-info/
