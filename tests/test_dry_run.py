@@ -105,8 +105,8 @@ def test_dry_run_end_to_end(tmp_path):
     # Real FrameBuilder + VideoRenderer pointed at tmp_path
     frame_builder = FrameBuilder(
         output_dir=str(tmp_path / "frames"),
-        width=108,   # tiny so the test is fast
-        height=192,
+        width=270,   # small but avoids coordinate issues (must be > 120px)
+        height=480,
     )
     video_renderer = VideoRenderer(
         audio_dir=str(tmp_path / "audio"),
@@ -136,12 +136,12 @@ def test_dry_run_end_to_end(tmp_path):
     # Check frames were built
     frames_dir = tmp_path / "frames"
     frame_files = list(frames_dir.glob("e2e_player_frame_*.png"))
-    assert len(frame_files) == 7, f"Expected 7 frames, found {len(frame_files)}"
+    assert len(frame_files) == 8, f"Expected 8 frames, found {len(frame_files)}"
 
     # Check audio was synthesised
     audio_dir = tmp_path / "audio"
     audio_files = list(audio_dir.glob("e2e_player_audio_*.wav"))
-    assert len(audio_files) == 7, f"Expected 7 audio files, found {len(audio_files)}"
+    assert len(audio_files) == 8, f"Expected 8 audio files, found {len(audio_files)}"
 
 
 def test_dry_run_does_not_call_telegram_or_youtube(tmp_path):
@@ -160,7 +160,7 @@ def test_dry_run_does_not_call_telegram_or_youtube(tmp_path):
         clue_writer=_make_clue_writer_mock(),
         image_gen=_make_image_gen_mock(tmp_path),
         frame_builder=FrameBuilder(
-            output_dir=str(tmp_path / "frames2"), width=108, height=192
+            output_dir=str(tmp_path / "frames2"), width=270, height=480
         ),
         video_renderer=VideoRenderer(
             audio_dir=str(tmp_path / "audio2"),

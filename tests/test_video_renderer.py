@@ -81,14 +81,14 @@ def test_synthesise_audio_filename_contains_index(renderer):
 # Audio list
 # ---------------------------------------------------------------------------
 
-def test_build_audio_tracks_returns_seven_paths(renderer):
-    """build_audio_tracks must return exactly 7 paths (title + 4 clues + reveal + cta)."""
+def test_build_audio_tracks_returns_eight_paths(renderer):
+    """build_audio_tracks must return exactly 8 paths (title + 4 clues + suspense + reveal + cta)."""
     paths = renderer.build_audio_tracks(
         player_id="p1",
         player_name="Justin Jefferson",
         clues=CLUES,
     )
-    assert len(paths) == 7
+    assert len(paths) == 8
 
 
 def test_build_audio_tracks_all_files_exist(renderer):
@@ -127,7 +127,7 @@ def test_render_video_returns_path(renderer, tmp_path):
     # Create blank PNG stubs for frames
     from PIL import Image
     frame_paths = []
-    for i in range(7):
+    for i in range(8):
         fp = str(tmp_path / f"frame_{i:02d}.png")
         Image.new("RGB", (1080, 1920), (0, 0, 0)).save(fp)
         frame_paths.append(fp)
@@ -149,7 +149,7 @@ def test_render_video_creates_file(renderer, tmp_path):
     )
     from PIL import Image
     frame_paths = []
-    for i in range(7):
+    for i in range(8):
         fp = str(tmp_path / f"frame_{i:02d}.png")
         Image.new("RGB", (1080, 1920), (0, 0, 0)).save(fp)
         frame_paths.append(fp)
@@ -171,7 +171,7 @@ def test_render_video_filename_contains_player_id(renderer, tmp_path):
     )
     from PIL import Image
     frame_paths = []
-    for i in range(7):
+    for i in range(8):
         fp = str(tmp_path / f"frame_{i:02d}.png")
         Image.new("RGB", (1080, 1920), (0, 0, 0)).save(fp)
         frame_paths.append(fp)
@@ -185,20 +185,20 @@ def test_render_video_filename_contains_player_id(renderer, tmp_path):
 
 
 def test_render_video_wrong_frame_count_raises(renderer):
-    """Passing != 7 frame paths must raise ValueError."""
-    with pytest.raises(ValueError, match="7 frame"):
+    """Passing != 8 frame paths must raise ValueError."""
+    with pytest.raises(ValueError, match="8 frame"):
         renderer.render_video(
             player_id="p1",
             frame_paths=["a.png"],
-            audio_paths=["b.wav"] * 7,
+            audio_paths=["b.wav"] * 8,
         )
 
 
 def test_render_video_wrong_audio_count_raises(renderer):
-    """Passing != 7 audio paths must raise ValueError."""
-    with pytest.raises(ValueError, match="7 audio"):
+    """Passing != 8 audio paths must raise ValueError."""
+    with pytest.raises(ValueError, match="8 audio"):
         renderer.render_video(
             player_id="p1",
-            frame_paths=["a.png"] * 7,
+            frame_paths=["a.png"] * 8,
             audio_paths=["b.wav"],
         )

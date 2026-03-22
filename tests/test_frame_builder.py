@@ -1,4 +1,4 @@
-"""Tests for FrameBuilder — TDD red phase."""
+"""Tests for FrameBuilder — 8-frame pipeline."""
 import os
 import pytest
 from pathlib import Path
@@ -26,16 +26,18 @@ def test_frame_builder_importable():
     from agents.frame_builder import FrameBuilder  # noqa: F401
 
 
-def test_build_frames_returns_seven_paths(builder, tmp_path):
-    """build_frames must return exactly 7 file paths."""
+def test_build_frames_returns_eight_paths(builder, tmp_path):
+    """build_frames must return exactly 8 file paths."""
     paths = builder.build_frames(
         player_id="p1",
         player_name="Justin Jefferson",
-        clues=CLUES,
+        stats=CLUES,
         silhouette_path=str(tmp_path / "sil.png"),
         portrait_path=str(tmp_path / "por.png"),
+        week=5,
+        season=2024,
     )
-    assert len(paths) == 7
+    assert len(paths) == 8
 
 
 def test_build_frames_all_png(builder, tmp_path):
@@ -43,9 +45,11 @@ def test_build_frames_all_png(builder, tmp_path):
     paths = builder.build_frames(
         player_id="p1",
         player_name="Justin Jefferson",
-        clues=CLUES,
+        stats=CLUES,
         silhouette_path=str(tmp_path / "sil.png"),
         portrait_path=str(tmp_path / "por.png"),
+        week=5,
+        season=2024,
     )
     for p in paths:
         assert p.endswith(".png"), f"Not a PNG: {p}"
@@ -56,23 +60,27 @@ def test_build_frames_files_exist(builder, tmp_path):
     paths = builder.build_frames(
         player_id="p1",
         player_name="Justin Jefferson",
-        clues=CLUES,
+        stats=CLUES,
         silhouette_path=str(tmp_path / "sil.png"),
         portrait_path=str(tmp_path / "por.png"),
+        week=5,
+        season=2024,
     )
     for p in paths:
         assert Path(p).exists(), f"File not found: {p}"
 
 
 def test_build_frames_wrong_clue_count_raises(builder, tmp_path):
-    """Passing fewer than 4 clues must raise ValueError."""
-    with pytest.raises(ValueError, match="4 clues"):
+    """Passing fewer than 4 stats must raise ValueError."""
+    with pytest.raises(ValueError, match="4"):
         builder.build_frames(
             player_id="p1",
             player_name="Test",
-            clues=["only one clue"],
+            stats=["only one clue"],
             silhouette_path=str(tmp_path / "sil.png"),
             portrait_path=str(tmp_path / "por.png"),
+            week=1,
+            season=2024,
         )
 
 
@@ -81,9 +89,11 @@ def test_build_frames_filenames_contain_player_id(builder, tmp_path):
     paths = builder.build_frames(
         player_id="abc123",
         player_name="Test Player",
-        clues=CLUES,
+        stats=CLUES,
         silhouette_path=str(tmp_path / "sil.png"),
         portrait_path=str(tmp_path / "por.png"),
+        week=1,
+        season=2024,
     )
     for p in paths:
         assert "abc123" in Path(p).name

@@ -19,8 +19,9 @@ from pathlib import Path
 
 import config
 
-# Narration scripts for each of the 7 frames.
+# Narration scripts for each of the 8 frames.
 _TITLE_SCRIPT = "Welcome to Guess That Player! Can you figure out who it is?"
+_SUSPENSE_SCRIPT = "You've seen all the clues — drop your guess below!"
 _REVEAL_SCRIPT = "The answer is… {player_name}!"
 _CTA_SCRIPT = "If you got it right, like and subscribe for weekly Guess That Player!"
 
@@ -65,10 +66,10 @@ class VideoRenderer:
         player_name: str,
         clues: list[str],
     ) -> list[str]:
-        """Generate 7 audio tracks corresponding to the 7 video frames.
+        """Generate 8 audio tracks corresponding to the 8 video frames.
 
         Track order:
-          0 — title,  1–4 — clues,  5 — reveal,  6 — CTA
+          0 — title,  1–4 — clues,  5 — suspense,  6 — reveal,  7 — CTA
 
         Raises ValueError if ``clues`` does not contain exactly 4 items.
         """
@@ -83,6 +84,7 @@ class VideoRenderer:
             _clue_script(2, clues[1]),
             _clue_script(3, clues[2]),
             _clue_script(4, clues[3]),
+            _SUSPENSE_SCRIPT,
             _REVEAL_SCRIPT.format(player_name=player_name),
             _CTA_SCRIPT,
         ]
@@ -98,20 +100,20 @@ class VideoRenderer:
         frame_paths: list[str],
         audio_paths: list[str],
     ) -> str:
-        """Assemble 7 frames + 7 audio tracks into a single MP4.
+        """Assemble 8 frames + 8 audio tracks into a single MP4.
 
         Each frame is shown for its corresponding audio duration.
         Returns the path to the output MP4.
 
         Raises ValueError for wrong input counts.
         """
-        if len(frame_paths) != 7:
+        if len(frame_paths) != 8:
             raise ValueError(
-                f"render_video requires exactly 7 frame paths, got {len(frame_paths)}"
+                f"render_video requires exactly 8 frame paths, got {len(frame_paths)}"
             )
-        if len(audio_paths) != 7:
+        if len(audio_paths) != 8:
             raise ValueError(
-                f"render_video requires exactly 7 audio paths, got {len(audio_paths)}"
+                f"render_video requires exactly 8 audio paths, got {len(audio_paths)}"
             )
 
         out_path = os.path.join(self._output_dir, f"{player_id}_video.mp4")

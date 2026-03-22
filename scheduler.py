@@ -132,7 +132,7 @@ class Scheduler:
         frame_paths = self._frame_builder.build_frames(
             player_id=player_id,
             player_name=player_name,
-            clues=clues,
+            stats=clues,
             silhouette_path=silhouette_path,
             portrait_path=portrait_path,
             week=self._week,

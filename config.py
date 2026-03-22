@@ -27,10 +27,10 @@ REDDIT_USER_AGENT: str = os.getenv(
 )
 
 # ---------------------------------------------------------------------------
-# Claude API
+# Google Gemini API
 # ---------------------------------------------------------------------------
-ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # ---------------------------------------------------------------------------
 # Telegram
@@ -73,3 +73,4 @@ SCORE_WEIGHT_RECENCY: float = float(os.getenv("SCORE_WEIGHT_RECENCY", "0.1"))
 # ---------------------------------------------------------------------------
 IMAGE_WIDTH: int = int(os.getenv("IMAGE_WIDTH", "1080"))
 IMAGE_HEIGHT: int = int(os.getenv("IMAGE_HEIGHT", "1920"))
+IMAGEN_MODEL: str = os.getenv("IMAGEN_MODEL", "imagen-4.0-generate-001")
