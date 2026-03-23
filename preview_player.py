@@ -262,18 +262,38 @@ def _build_click_track(path, total_dur, clicks):
         wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
         wf.writeframes(b"".join(struct.pack("<h", s) for s in buf))
 
+_GIF_PATH = os.path.join(os.path.dirname(__file__), "assets", "starburst.gif")
+_USE_GIF  = os.path.exists(_GIF_PATH)
+
 print("Rendering video...")
 with tempfile.TemporaryDirectory() as tmp:
     segments = []
     for idx, (fp, dur) in enumerate(zip(paths, DURATIONS)):
         seg = os.path.join(tmp, f"seg_{idx:02d}.mp4")
-        subprocess.run(
-            [FFMPEG, "-y", "-loop", "1", "-i", fp,
-             "-t", str(dur), "-vf", "scale=1080:1920",
-             "-c:v", "libx264", "-tune", "stillimage",
-             "-pix_fmt", "yuv420p", "-r", "30", seg],
-            check=True, capture_output=True,
-        )
+        if _USE_GIF:
+            cmd = [
+                FFMPEG, "-y",
+                "-stream_loop", "-1", "-t", str(dur), "-i", _GIF_PATH,
+                "-loop", "1", "-t", str(dur), "-i", fp,
+                "-filter_complex",
+                (
+                    "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+                    "crop=1080:1920,setpts=PTS-STARTPTS[bg];"
+                    "[1:v]format=rgba,setpts=PTS-STARTPTS[fg];"
+                    "[bg][fg]overlay=0:0:format=auto[v]"
+                ),
+                "-map", "[v]",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+                "-t", str(dur), seg,
+            ]
+        else:
+            cmd = [
+                FFMPEG, "-y", "-loop", "1", "-i", fp,
+                "-t", str(dur), "-vf", "scale=1080:1920",
+                "-c:v", "libx264", "-tune", "stillimage",
+                "-pix_fmt", "yuv420p", "-r", "30", seg,
+            ]
+        subprocess.run(cmd, check=True, capture_output=True)
         segments.append(seg)
 
     concat_txt = os.path.join(tmp, "concat.txt")
