@@ -142,12 +142,16 @@ class FrameBuilder:
         sy  = sil_cy - sil_size // 2 + 20
         img.paste(sil, (sx, sy), mask=sil.split()[3])
 
-        # "GUESS THAT WR?" — Pokemon logo style: large italic yellow with thick navy outline
-        self._draw_pokemon_title(img, f"GUESS THAT {pos_label}?", y=18)
+        # "GUESS THAT WR?" — large Bebas Neue, yellow with thick navy outline
         draw = ImageDraw.Draw(img)
+        title_text = f"GUESS THAT {pos_label}?"
+        title_size = self._fit_font_size(draw, title_text, max_w=1020, max_size=128, min_size=72)
+        self._draw_outlined(draw, title_text, y=18,
+                            font=_f(title_size), fill=_POKE_YELLOW,
+                            outline=_POKE_OUTLINE, thickness=12)
 
         # Season/week pill badge
-        self._draw_week_badge(draw, week, season, y=138)
+        self._draw_week_badge(draw, week, season, y=18 + title_size + 8)
 
         # Big "?" on hook frame — with strong glow
         if show_q:
@@ -209,9 +213,10 @@ class FrameBuilder:
         text_y = int(self._h * 0.72)
         draw.rectangle([(40, text_y - 8), (self._w - 40, text_y - 4)], fill=_GOLD)
 
-        # "WHO IS IT??" — Pokemon logo style
-        self._draw_pokemon_title(img, "WHO IS IT??", y=text_y)
-        draw = ImageDraw.Draw(img)
+        # "WHO IS IT??" — large Bebas Neue, yellow with thick navy outline
+        self._draw_outlined(draw, "WHO IS IT??", y=text_y,
+                            font=_f(136), fill=_POKE_YELLOW,
+                            outline=_POKE_OUTLINE, thickness=12)
 
         self._draw_outlined(draw, "DROP YOUR GUESS BELOW",
                             y=text_y + 155, font=_f(56),
@@ -246,10 +251,14 @@ class FrameBuilder:
         img.paste(cutout, (sx, sy), mask=cutout.split()[3])
         draw = ImageDraw.Draw(img)
 
-        # Consistent header — Pokemon logo style
-        self._draw_pokemon_title(img, f"GUESS THAT {pos_label}?", y=18)
+        # Consistent header — large Bebas Neue, yellow with thick navy outline
         draw = ImageDraw.Draw(img)
-        self._draw_week_badge(draw, week, season, y=138)
+        title_text = f"GUESS THAT {pos_label}?"
+        title_size = self._fit_font_size(draw, title_text, max_w=1020, max_size=128, min_size=72)
+        self._draw_outlined(draw, title_text, y=18,
+                            font=_f(title_size), fill=_POKE_YELLOW,
+                            outline=_POKE_OUTLINE, thickness=12)
+        self._draw_week_badge(draw, week, season, y=18 + title_size + 8)
 
         row_h     = 230
         stats_top = self._h - (4 * row_h) - 30
