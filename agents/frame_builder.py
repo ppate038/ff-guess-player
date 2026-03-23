@@ -245,10 +245,9 @@ class FrameBuilder:
         sx = (self._w - por_size) // 2
         sy = sil_cy - por_size // 2 + 20
 
-        # Color cutout: remove bg, keep player in full color on red canvas
-        cutout = self._make_color_cutout(portrait)
-        cutout = cutout.resize((por_size, por_size), Image.LANCZOS)
-        img.paste(cutout, (sx, sy), mask=cutout.split()[3])
+        # Radial vignette: soft circular fade into background — no bg removal needed
+        faded = self._apply_radial_vignette(portrait, por_size)
+        img.paste(faded, (sx, sy), mask=faded.split()[3])
         draw = ImageDraw.Draw(img)
 
         # Consistent header with glow
@@ -342,6 +341,23 @@ class FrameBuilder:
         navy   = Image.new("RGBA", (w, h), (*_NAVY, 255))
         _, _, _, alpha = rgba.split()
         result.paste(navy, mask=alpha)
+        return result
+
+    def _apply_radial_vignette(self, img: Image.Image, size: int) -> Image.Image:
+        """Scale img to size×size and apply a soft circular mask.
+
+        The centre is fully opaque; edges fade to transparent so the photo
+        blends smoothly into whatever background it's placed on.
+        """
+        img = img.convert("RGB").resize((size, size), Image.LANCZOS)
+        # Circular mask with blurred edges for soft fade
+        mask = Image.new("L", (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        margin = int(size * 0.04)
+        draw.ellipse([(margin, margin), (size - margin, size - margin)], fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=int(size * 0.05)))
+        result = img.convert("RGBA")
+        result.putalpha(mask)
         return result
 
     def _make_color_cutout(self, img: Image.Image) -> Image.Image:
