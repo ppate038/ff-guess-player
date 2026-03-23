@@ -245,9 +245,10 @@ class FrameBuilder:
         sx = (self._w - por_size) // 2
         sy = sil_cy - por_size // 2 + 20
 
-        # Radial vignette: soft circular fade into background — no bg removal needed
-        faded = self._apply_radial_vignette(portrait, por_size)
-        img.paste(faded, (sx, sy), mask=faded.split()[3])
+        # Color cutout: BFS removes near-pure black/white background, keeps player
+        cutout = self._make_color_cutout(portrait)
+        cutout = cutout.resize((por_size, por_size), Image.LANCZOS)
+        img.paste(cutout, (sx, sy), mask=cutout.split()[3])
         draw = ImageDraw.Draw(img)
 
         # Consistent header with glow
@@ -380,8 +381,9 @@ class FrameBuilder:
             x, y = queue.popleft()
             r, g, b, a = pixels[x, y]
             brightness = (int(r) + int(g) + int(b)) / 3
-            # Remove very dark (black studio bg) or very light (white bg) pixels
-            if brightness < 50 or brightness > 215:
+            # Tight threshold: only remove near-pure black (studio bg) or near-pure white
+            # Dark skin/uniform is typically brightness 30+, so < 20 is safe
+            if brightness < 20 or brightness > 230:
                 pixels[x, y] = (0, 0, 0, 0)
                 for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                     if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in visited:
