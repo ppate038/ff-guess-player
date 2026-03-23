@@ -72,18 +72,21 @@ Copy `.env.example` to `.env`:
 
 Note: ClueWriter uses the Claude Code CLI (`claude.cmd`) — no ANTHROPIC_API_KEY needed.
 
-## Pipeline Stages (8-frame layout)
+## Pipeline Stages (7 active frames — suspense removed)
 
 ```
-Frame 0  — Hook       "GUESS THAT WR?" + navy silhouette + "?"
+Frame 0  — Hook       "GUESS THAT {POS}?" + navy silhouette + "?"
 Frame 1  — Stat 1     Silhouette + first stat revealed
 Frame 2  — Stat 2     Silhouette + stats 1-2
 Frame 3  — Stat 3     Silhouette + stats 1-3
 Frame 4  — All stats  Silhouette + all 4 stats
-Frame 5  — Suspense   "WHO IS IT??" — drop your guess
-Frame 6  — Reveal     Player photo (bg removed) + name + stats recap
+Frame 5  — (SKIPPED — suspense frame removed from video)
+Frame 6  — Reveal     "IT'S... {NAME}" at top + player photo + stats (large font)
 Frame 7  — CTA        "WHERE ARE YOU DRAFTING HIM NEXT YEAR?"
 ```
+
+FrameBuilder.build_frames() still returns 8 paths. preview_player.py skips index 5
+via `_ACTIVE_FRAMES = [0,1,2,3,4,6,7]` before rendering.
 
 Scheduler stages:
 1. **SleeperAgent** — fetch top-N PPR performers for the configured week
@@ -93,33 +96,103 @@ Scheduler stages:
 5. **ClueWriter** — 4 progressive clues via Claude CLI (`claude -p "..." --output-format text`)
 6. **ImageGenerator** — Sleeper CDN headshot; BFS silhouette extraction
 7. **FrameBuilder** — 8 Pillow frames (1080×1920)
-8. **VideoRenderer** — Google TTS per stat → ffmpeg MP4
-9. **TelegramBot** — send for human review
+8. **VideoRenderer** — Google TTS audio + ffmpeg MP4 (uses starburst.gif overlay)
+9. **Discord approval** — stat lines shown for edit before render; final video approve/reject
 10. **YouTubeUploader** — OAuth upload if approved
 
 ## Frame Design (Pokemon-style)
 
-- **Background:** Poker red (`#CC0000`) with lighter red diagonal polygon
+- **Background:** Transparent RGBA canvas `(0,0,0,0)` — `assets/starburst.gif` animated background
+  composited underneath each frame via ffmpeg `filter_complex overlay`. Never add a solid background in Pillow.
 - **Silhouette:** Navy (`#1E2D5A`) — BFS flood-fill strips white/grey bg from Sleeper headshot
 - **Title:** `GUESS THAT {POSITION}?` in Bebas Neue with gold glow
-- **Stats:** Centered white text with black outline, auto-sized to fit width
-- **Progress dots:** Gold = revealed, hollow = hidden
-- **Reveal portrait:** BFS removes near-pure-black bg (threshold < 10 brightness) + GaussianBlur alpha cleanup; same size/position as silhouette for seamless cut
+- **Stats:** Centered white text with black outline, auto-sized to fit width. No dark panel behind stats.
+- **Progress dots:** REMOVED. Do not re-add.
+- **Border/divider lines:** REMOVED. Do not re-add.
+- **Week badge:** REMOVED. Do not re-add.
+- **Reveal portrait:** `rembg` AI matting (not BFS) + alpha hardening (`p * 1.5`) + dark GaussianBlur
+  glow behind player. rembg model auto-downloads once (~176MB) to `~/.u2net/`.
+- **Reveal layout:** "IT'S..." + player name at TOP (yellow glow); stats use same large outlined
+  font as clue frames (max_size=76, thickness=7).
 - **Font:** `BebasNeue.ttf` (falls back to Impact, Arial)
+
+## Audio & Video Timing
+
+- **Music:** `assets/whos-that-pokemon-v2.mp3` (17.48s) — video synced to match
+- **DURATIONS** (7 entries matching `_ACTIVE_FRAMES`):
+  `[3.0, 1.5, 1.5, 1.5, 2.5, 4.0, 3.48]`
+  Hook 0-3s | Clues build 3-10s | Reveal at 10s | CTA at 14s
+- `preview_player.py` has its own standalone ffmpeg loop — does NOT use VideoRenderer.
+  Both must be kept in sync when changing video assembly logic.
+- **ffprobe:** same directory as ffmpeg — replace `ffmpeg.exe` with `ffprobe.exe`
 
 ## Stat Lines Built by preview_player.py
 
-Season mode (4 lines shown on frames):
-1. `{games} games played ({year_label})`
+Season mode — position-aware (4 lines shown on frames):
+
+**RB:**
+1. `{top10_count} top-10 RB weeks`
 2. `{pts_per_game:.1f} PPR pts / game`
-3. `{rec_yd_per_game:.0f} rec yd/g | {rec_total} catches` (or pass stats for QBs)
-4. `#{rank} {position} in PPR` (position rank across all Sleeper players)
+3. `{rush_yd_total} total rush yards`
+4. `#{rank} RB in PPR`
+
+**WR / TE:**
+1. `{games} games played`
+2. `{pts_per_game:.1f} PPR pts / game`
+3. `{rec_yd_per_game:.0f} rec yd/g | {rec_total} catches`
+4. `#{rank} {pos} in PPR`
+
+**QB:**
+1. `{games} games played`
+2. `{pts_per_game:.1f} PPR pts / game`
+3. `{pass_yd_per_game:.0f} pass yd/g | {pass_td_total} TDs`
+4. `#{rank} QB in PPR`
+
+Note: Year label removed from stat 1. `_fetch_season()` returns 4-tuple: `(agg, games, pos_totals, top10_count)`.
 
 Week mode:
 1. `{pts_ppr:.1f} PPR pts | Week {week}`
 2. Receiving or passing stats
 3. Rush stats
 4. Team name
+
+## Platform Notes
+
+- **TikTok Creator Rewards requires ≥ 1 minute** video duration to earn revenue.
+  Current 17s format earns views/followers but NOT TikTok revenue. 60s variant planned.
+- Cross-posting: export original file (no watermark) → upload to each platform with native captions.
+  TikTok-watermarked videos are suppressed by Instagram's perceptual hash detection.
+
+## MCP Servers & Tools (use these proactively)
+
+| Tool/MCP | When to use |
+|---|---|
+| **Discord MCP** (`mcp__plugin_discord_discord__reply`) | All Premal communication — stat approval, video review, player selection, status updates |
+| **Discord MCP** (`fetch_messages`, `download_attachment`) | Read Premal's replies and view screenshots he sends |
+| **Playwright MCP** | Browser automation — future: Google AI Studio TTS, platform checking |
+| **context7 MCP** | Look up library docs before using any external API (Pillow, PRAW, google-cloud-tts) |
+| **WebSearch** | Research player news, platform algorithm updates, fantasy trends |
+| **WebFetch** | Fetch specific articles, Rotowire, NFL.com, Reddit threads |
+| **Agent tool** | Spawn research-analyst, growth-strategist, codebase-auditor for parallel work |
+
+## Agents & Skills (use these, don't re-invent)
+
+**Agents** (in `.claude/agents/`):
+- `content-strategist` — picks best player for guessing video
+- `video-reviewer` — QA gate before showing Premal
+- `metadata-writer` — YouTube/TikTok/Instagram copy
+- `codebase-auditor` — proactive code quality review
+- `research-analyst` — overnight player research
+- `growth-strategist` — monetization tracking, business name research
+
+**Skills** (invoke with Skill tool):
+- `/weekly-content` — full production workflow from research to approval
+- `/preview "Name" YEAR` — fast preview + auto-QA
+- `/batch-generate` — content bank builder
+- `/publish [slug]` — Discord approval gate (never auto-publishes)
+
+**Non-negotiable:** Premal approves all player selection, stat lines, final video, and publishing.
+Never upload to any platform. Never make purchases. Never create accounts.
 
 ## Coding Conventions
 
