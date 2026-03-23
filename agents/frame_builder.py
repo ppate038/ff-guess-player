@@ -142,18 +142,12 @@ class FrameBuilder:
         sy  = sil_cy - sil_size // 2 + 20
         img.paste(sil, (sx, sy), mask=sil.split()[3])
 
-        # "GUESS THAT WR?" header — with yellow glow
-        title_text = f"GUESS THAT {pos_label}?"
-        title_font = _f(84)
-        bbox = draw.textbbox((0, 0), title_text, font=title_font)
-        tx   = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, title_text, tx, 30, title_font,
-                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
-                             glow_color=_POKE_YELLOW, glow_radius=28)
+        # "GUESS THAT WR?" — Pokemon logo style: large italic yellow with thick navy outline
+        self._draw_pokemon_title(img, f"GUESS THAT {pos_label}?", y=18)
         draw = ImageDraw.Draw(img)
 
         # Season/week pill badge
-        self._draw_week_badge(draw, week, season, y=126)
+        self._draw_week_badge(draw, week, season, y=138)
 
         # Big "?" on hook frame — with strong glow
         if show_q:
@@ -169,6 +163,11 @@ class FrameBuilder:
         # Stats area — 4 rows of 230px anchored from bottom
         row_h     = 230
         stats_top = self._h - (4 * row_h) - 30
+
+        # Semi-transparent dark panel behind stats for readability on any background
+        stats_panel = Image.new("RGBA", (self._w, 4 * row_h + 50), (0, 0, 0, 170))
+        img.alpha_composite(stats_panel, (0, stats_top - 20))
+        draw = ImageDraw.Draw(img)
 
         if visible_stats:
             draw.rectangle([(40, stats_top - 7), (self._w - 40, stats_top - 3)],
@@ -210,17 +209,13 @@ class FrameBuilder:
         text_y = int(self._h * 0.72)
         draw.rectangle([(40, text_y - 8), (self._w - 40, text_y - 4)], fill=_GOLD)
 
-        # "WHO IS IT??" with yellow glow
-        wi_font = _f(136)
-        bbox    = ImageDraw.Draw(img).textbbox((0, 0), "WHO IS IT??", font=wi_font)
-        wx      = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, "WHO IS IT??", wx, text_y, wi_font,
-                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
-                             glow_color=_POKE_YELLOW, glow_radius=30)
+        # "WHO IS IT??" — Pokemon logo style
+        self._draw_pokemon_title(img, "WHO IS IT??", y=text_y)
         draw = ImageDraw.Draw(img)
 
-        self._text_c(draw, "DROP YOUR GUESS BELOW  👇",
-                     y=text_y + 155, font=_f(54), color=_WHITE)
+        self._draw_outlined(draw, "DROP YOUR GUESS BELOW",
+                            y=text_y + 155, font=_f(56),
+                            fill=_WHITE, outline=(0, 0, 0), thickness=6)
 
         self._draw_progress_dots(draw, total=4, filled=4)
 
@@ -251,16 +246,10 @@ class FrameBuilder:
         img.paste(cutout, (sx, sy), mask=cutout.split()[3])
         draw = ImageDraw.Draw(img)
 
-        # Consistent header with glow
-        title_text = f"GUESS THAT {pos_label}?"
-        title_font = _f(84)
-        bbox = draw.textbbox((0, 0), title_text, font=title_font)
-        tx   = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, title_text, tx, 30, title_font,
-                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
-                             glow_color=_POKE_YELLOW, glow_radius=28)
+        # Consistent header — Pokemon logo style
+        self._draw_pokemon_title(img, f"GUESS THAT {pos_label}?", y=18)
         draw = ImageDraw.Draw(img)
-        self._draw_week_badge(draw, week, season, y=126)
+        self._draw_week_badge(draw, week, season, y=138)
 
         row_h     = 230
         stats_top = self._h - (4 * row_h) - 30
@@ -299,16 +288,26 @@ class FrameBuilder:
         draw = ImageDraw.Draw(img)
         cy   = self._h // 2
 
-        draw.rectangle([(0, cy - 280), (self._w, cy - 274)], fill=_POKE_RED)
-        draw.rectangle([(0, cy + 240), (self._w, cy + 246)], fill=_POKE_RED)
+        # Dark backing panel so all CTA text is readable over the starburst
+        panel = Image.new("RGBA", (self._w, 560), (0, 0, 0, 160))
+        img.alpha_composite(panel, (0, cy - 290))
+        draw = ImageDraw.Draw(img)
 
-        self._text_c(draw, "DID YOU GET IT RIGHT?", y=cy - 240, font=_f(58), color=_GREY)
-        self._draw_outlined(draw, "LIKE &",    y=cy - 152, font=_f(140),
-                            fill=_POKE_YELLOW, outline=_POKE_OUTLINE)
-        self._draw_outlined(draw, "SUBSCRIBE", y=cy + 10,  font=_f(130),
-                            fill=_POKE_YELLOW, outline=_POKE_OUTLINE)
-        self._text_c(draw, "WHERE ARE YOU DRAFTING HIM NEXT YEAR?",
-                     y=cy + 200, font=_f(46), color=_WHITE)
+        draw.rectangle([(0, cy - 290), (self._w, cy - 284)], fill=_GOLD)
+        draw.rectangle([(0, cy + 260), (self._w, cy + 266)], fill=_GOLD)
+
+        self._draw_outlined(draw, "DID YOU GET IT RIGHT?",
+                            y=cy - 258, font=_f(66),
+                            fill=_WHITE, outline=(0, 0, 0), thickness=6)
+        self._draw_outlined(draw, "LIKE &",    y=cy - 162, font=_f(148),
+                            fill=_POKE_YELLOW, outline=_POKE_OUTLINE, thickness=12)
+        self._draw_outlined(draw, "SUBSCRIBE", y=cy + 10,  font=_f(138),
+                            fill=_POKE_YELLOW, outline=_POKE_OUTLINE, thickness=12)
+        cta_text  = "WHERE ARE YOU DRAFTING HIM NEXT YEAR?"
+        cta_fsize = self._fit_font_size(draw, cta_text, max_w=1020, max_size=50, min_size=32)
+        self._draw_outlined(draw, cta_text,
+                            y=cy + 218, font=_f(cta_fsize),
+                            fill=_WHITE, outline=(0, 0, 0), thickness=6)
         return img
 
     # ------------------------------------------------------------------
@@ -416,6 +415,62 @@ class FrameBuilder:
         inner_r = int(_BURST_INNER_R * 0.78)
         draw.ellipse([(cx - inner_r, cy - inner_r),
                       (cx + inner_r, cy + inner_r)], fill=_BURST_CYAN)
+
+    def _draw_pokemon_title(
+        self,
+        img: Image.Image,
+        text: str,
+        y: int,
+        font_size: int = 118,
+        shear: float = 0.18,
+    ) -> None:
+        """Pokemon logo-style title: large italic-sheared yellow text with thick navy outline + shadow."""
+        font      = _f(font_size)
+        thickness = 15
+        shadow    = 8
+
+        # Measure text
+        tmp_d = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+        bbox  = tmp_d.textbbox((0, 0), text, font=font)
+        tw    = bbox[2] - bbox[0]
+        th    = bbox[3] - bbox[1]
+
+        pad     = thickness + shadow + 4
+        extra_w = int(th * shear) + pad  # extra width for italic lean
+        tmp_w   = tw + pad * 2 + extra_w
+        tmp_h   = th + pad * 2
+
+        tmp = Image.new("RGBA", (tmp_w, tmp_h), (0, 0, 0, 0))
+        td  = ImageDraw.Draw(tmp)
+        ox, oy = pad, pad
+
+        # Dark 3D shadow
+        for dx in range(-thickness // 2, thickness // 2 + 1, 2):
+            for dy in range(-thickness // 2, thickness // 2 + 1, 2):
+                td.text((ox + dx + shadow, oy + dy + shadow), text,
+                        font=font, fill=(8, 0, 32, 200))
+
+        # Thick navy outline
+        for dx in range(-thickness, thickness + 1, 2):
+            for dy in range(-thickness, thickness + 1, 2):
+                if dx or dy:
+                    td.text((ox + dx, oy + dy), text, font=font, fill=_POKE_OUTLINE)
+
+        # Yellow fill
+        td.text((ox, oy), text, font=font, fill=_POKE_YELLOW)
+
+        # Apply italic shear (right-lean, / style)
+        sheared = tmp.transform(
+            (tmp_w, tmp_h),
+            Image.AFFINE,
+            (1, -shear, shear * tmp_h, 0, 1, 0),
+            Image.BICUBIC,
+        )
+
+        # Center horizontally, accounting for shear offset
+        paste_x = (self._w - tw) // 2 - pad + extra_w // 2
+        paste_y = y
+        img.alpha_composite(sheared, (max(0, paste_x), max(0, paste_y)))
 
     def _draw_week_badge(
         self, draw: ImageDraw.ImageDraw, week: int, season: int, y: int
