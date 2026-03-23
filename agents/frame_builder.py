@@ -1,14 +1,16 @@
 """Frame builder — Pokemon 'Guess That Player?' style, portrait 1080x1920.
 
-Frame layout:
-  Frame 0  — Hook       (red bg, jagged burst, navy silhouette, "GUESS THAT PLAYER?")
-  Frame 1  — Stat 1     (same + stat 1 revealed at bottom)
-  Frame 2  — Stat 2     (same + stats 1-2)
-  Frame 3  — Stat 3     (same + stats 1-3)
-  Frame 4  — All stats  (same + all 4 stats)
-  Frame 5  — Suspense   (burst + silhouette + "WHO IS IT??")
-  Frame 6  — Reveal     (red bg + real photo + name + stats recap)
-  Frame 7  — CTA
+Frame layout (8 built, 7 rendered — index 5 skipped in preview_player.py):
+  Frame 0  — Hook       Transparent RGBA canvas + navy silhouette + "GUESS THAT {POS}?"
+  Frame 1  — Stat 1     Silhouette + stat 1 revealed
+  Frame 2  — Stat 2     Silhouette + stats 1-2
+  Frame 3  — Stat 3     Silhouette + stats 1-3
+  Frame 4  — All stats  Silhouette + all 4 stats
+  Frame 5  — Suspense   (built but skipped in preview_player.py _ACTIVE_FRAMES)
+  Frame 6  — Reveal     "IT'S... {NAME}" at top + rembg portrait + stats (large font)
+  Frame 7  — CTA        "WHERE ARE YOU DRAFTING HIM NEXT YEAR?"
+
+Background is transparent (0,0,0,0) — starburst.gif composited by ffmpeg overlay.
 """
 import math
 import os
@@ -323,23 +325,6 @@ class FrameBuilder:
         result.paste(navy, mask=alpha)
         return result
 
-    def _apply_radial_vignette(self, img: Image.Image, size: int) -> Image.Image:
-        """Scale img to size×size and apply a soft circular mask.
-
-        The centre is fully opaque; edges fade to transparent so the photo
-        blends smoothly into whatever background it's placed on.
-        """
-        img = img.convert("RGB").resize((size, size), Image.LANCZOS)
-        # Circular mask with blurred edges for soft fade
-        mask = Image.new("L", (size, size), 0)
-        draw = ImageDraw.Draw(mask)
-        margin = int(size * 0.04)
-        draw.ellipse([(margin, margin), (size - margin, size - margin)], fill=255)
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=int(size * 0.05)))
-        result = img.convert("RGBA")
-        result.putalpha(mask)
-        return result
-
     def _make_color_cutout(self, img: Image.Image) -> Image.Image:
         """Remove studio background from headshot; keep player in color.
 
@@ -393,139 +378,9 @@ class FrameBuilder:
         """Transparent RGBA canvas — starburst GIF background added by VideoRenderer."""
         return Image.new("RGBA", (self._w, self._h), (0, 0, 0, 0))
 
-    def _draw_burst(self, draw: ImageDraw.ImageDraw, cx: int, cy: int) -> None:
-        """White jagged star burst (Pokemon style) with cyan inner circle."""
-        pts = []
-        for i in range(_BURST_POINTS * 2):
-            angle = math.radians(i * 180 / _BURST_POINTS - 90)
-            r     = _BURST_OUTER_R if i % 2 == 0 else _BURST_INNER_R
-            pts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
-        draw.polygon(pts, fill=_BURST_WHITE)
-        inner_r = int(_BURST_INNER_R * 0.78)
-        draw.ellipse([(cx - inner_r, cy - inner_r),
-                      (cx + inner_r, cy + inner_r)], fill=_BURST_CYAN)
-
-    def _draw_pokemon_title(
-        self,
-        img: Image.Image,
-        text: str,
-        y: int,
-        font_size: int = 118,
-        shear: float = 0.18,
-    ) -> None:
-        """Pokemon logo-style title: large italic-sheared yellow text with thick navy outline + shadow."""
-        font      = _f(font_size)
-        thickness = 15
-        shadow    = 8
-
-        # Measure text
-        tmp_d = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-        bbox  = tmp_d.textbbox((0, 0), text, font=font)
-        tw    = bbox[2] - bbox[0]
-        th    = bbox[3] - bbox[1]
-
-        pad     = thickness + shadow + 4
-        extra_w = int(th * shear) + pad  # extra width for italic lean
-        tmp_w   = tw + pad * 2 + extra_w
-        tmp_h   = th + pad * 2
-
-        tmp = Image.new("RGBA", (tmp_w, tmp_h), (0, 0, 0, 0))
-        td  = ImageDraw.Draw(tmp)
-        ox, oy = pad, pad
-
-        # Dark 3D shadow
-        for dx in range(-thickness // 2, thickness // 2 + 1, 2):
-            for dy in range(-thickness // 2, thickness // 2 + 1, 2):
-                td.text((ox + dx + shadow, oy + dy + shadow), text,
-                        font=font, fill=(8, 0, 32, 200))
-
-        # Thick navy outline
-        for dx in range(-thickness, thickness + 1, 2):
-            for dy in range(-thickness, thickness + 1, 2):
-                if dx or dy:
-                    td.text((ox + dx, oy + dy), text, font=font, fill=_POKE_OUTLINE)
-
-        # Yellow fill
-        td.text((ox, oy), text, font=font, fill=_POKE_YELLOW)
-
-        # Apply italic shear (right-lean, / style)
-        sheared = tmp.transform(
-            (tmp_w, tmp_h),
-            Image.AFFINE,
-            (1, -shear, shear * tmp_h, 0, 1, 0),
-            Image.BICUBIC,
-        )
-
-        # Center horizontally, accounting for shear offset
-        paste_x = (self._w - tw) // 2 - pad + extra_w // 2
-        paste_y = y
-        img.alpha_composite(sheared, (max(0, paste_x), max(0, paste_y)))
-
-    def _draw_week_badge(
-        self, draw: ImageDraw.ImageDraw, week: int, season: int, y: int
-    ) -> None:
-        """Dark pill label showing season and optionally week number."""
-        text = f"{season}" if week == 0 else f"{season}  •  WEEK {week}"
-        font = _f(44)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw   = bbox[2] - bbox[0]
-        th   = bbox[3] - bbox[1]
-        pad_x, pad_y = 28, 10
-        bw = tw + pad_x * 2
-        bh = th + pad_y * 2
-        bx = (self._w - bw) // 2
-        draw.rectangle([(bx, y), (bx + bw, y + bh)], fill=_POKE_RED_DARK)
-        draw.text(((self._w - tw) // 2, y + pad_y), text, font=font, fill=_WHITE)
-
-    def _draw_progress_dots(
-        self, draw: ImageDraw.ImageDraw, total: int, filled: int
-    ) -> None:
-        """Progress indicator: gold filled = revealed, hollow = hidden."""
-        dot_r   = 14
-        spacing = 52
-        total_w = total * (dot_r * 2) + (total - 1) * (spacing - dot_r * 2)
-        start_x = (self._w - total_w) // 2
-        cy      = self._h - 38
-        for i in range(total):
-            cx = start_x + i * spacing + dot_r
-            if i < filled:
-                draw.ellipse([(cx - dot_r, cy - dot_r), (cx + dot_r, cy + dot_r)],
-                             fill=_GOLD)
-            else:
-                draw.ellipse([(cx - dot_r, cy - dot_r), (cx + dot_r, cy + dot_r)],
-                             outline=_WHITE, width=3)
-
-    def _paint_glow(self, img: Image.Image, cx: int, cy: int,
-                    color: tuple, radius: int = 600) -> None:
-        glow = Image.new("RGB", img.size, _DARK_BG)
-        draw = ImageDraw.Draw(glow)
-        for r in range(radius, 0, -2):
-            t = (1 - r / radius) ** 2
-            c = tuple(min(255, int(_DARK_BG[i] + (color[i] - _DARK_BG[i]) * t * 0.6))
-                      for i in range(3))
-            draw.ellipse([(cx-r, cy-r), (cx+r, cy+r)], fill=c)
-        img.paste(glow)
-
-    def _gradient_fade(self, img: Image.Image, from_y: int, to_y: int) -> None:
-        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw    = ImageDraw.Draw(overlay)
-        span    = max(1, to_y - from_y)
-        for y in range(from_y, to_y):
-            alpha = int(255 * ((y - from_y) / span) ** 1.5)
-            draw.line([(0, y), (self._w, y)], fill=(*_DARK_BG, alpha))
-        base = img.convert("RGBA")
-        base.alpha_composite(overlay)
-        img.paste(base.convert("RGB"))
-
     # ------------------------------------------------------------------
     # Drawing — text
     # ------------------------------------------------------------------
-
-    def _text_c(self, draw: ImageDraw.ImageDraw, text: str,
-                y: int, font: ImageFont.ImageFont, color: tuple = _WHITE) -> None:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        x    = (self._w - (bbox[2] - bbox[0])) // 2
-        draw.text((x, y), text, font=font, fill=color)
 
     def _draw_outlined(self, draw: ImageDraw.ImageDraw, text: str, y: int,
                        font: ImageFont.ImageFont, fill: tuple, outline: tuple,
@@ -580,26 +435,6 @@ class FrameBuilder:
                     draw.text((x+dx, y+dy), text, font=font, fill=outline)
         draw.text((x, y), text, font=font, fill=fill)
 
-    def _draw_text_left(self, draw: ImageDraw.ImageDraw, text: str,
-                        x: int, y: int, font: ImageFont.ImageFont,
-                        color: tuple = _WHITE, max_w: int = 0) -> None:
-        if not max_w:
-            draw.text((x, y), text, font=font, fill=color)
-            return
-        words, line, lines = text.split(), "", []
-        for word in words:
-            test = f"{line} {word}".strip()
-            if draw.textbbox((0, 0), test, font=font)[2] <= max_w:
-                line = test
-            else:
-                if line:
-                    lines.append(line)
-                line = word
-        if line:
-            lines.append(line)
-        for i, l in enumerate(lines):
-            draw.text((x, y + i * 90), l, font=font, fill=color)
-
     # ------------------------------------------------------------------
     # Image helpers
     # ------------------------------------------------------------------
@@ -608,32 +443,6 @@ class FrameBuilder:
         if os.path.exists(path):
             return Image.open(path).convert("RGBA")
         return Image.new("RGBA", (400, 400), (80, 80, 80, 255))
-
-    def _fill_square(self, img: Image.Image, size: int) -> Image.Image:
-        """Scale image so the shorter side fills `size`, then center-crop to size×size."""
-        ratio = max(size / img.width, size / img.height)
-        new_w = int(img.width  * ratio)
-        new_h = int(img.height * ratio)
-        img   = img.resize((new_w, new_h), Image.LANCZOS)
-        left  = (new_w - size) // 2
-        top   = (new_h - size) // 2
-        return img.crop((left, top, left + size, top + size))
-
-    def _fit_img(self, img: Image.Image, max_w: int, max_h: int) -> Image.Image:
-        ratio = min(max_w / img.width, max_h / img.height)
-        new_w = int(img.width  * ratio)
-        new_h = int(img.height * ratio)
-        return img.resize((new_w, new_h), Image.LANCZOS)
-
-    def _crop_circle(self, img: Image.Image, size: int) -> Image.Image:
-        """Return image cropped to circle with transparent background."""
-        img  = img.resize((size, size), Image.LANCZOS).convert("RGBA")
-        mask = Image.new("L", (size, size), 0)
-        draw = ImageDraw.Draw(mask)
-        draw.ellipse([(0, 0), (size - 1, size - 1)], fill=255)
-        result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        result.paste(img, mask=mask)
-        return result
 
     def _fit_font_size(
         self,

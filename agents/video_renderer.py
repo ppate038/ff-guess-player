@@ -7,9 +7,8 @@ back to a silent WAV stub so the rest of the pipeline stays runnable.
 ffmpeg must be on PATH for real video assembly; if it is missing the render
 step writes a tiny stub MP4 instead of raising so the dry-run keeps moving.
 
-TODO: Set GOOGLE_APPLICATION_CREDENTIALS to a valid service-account JSON file
-      to enable real Text-to-Speech narration.
-TODO: Install ffmpeg and ensure it is on PATH for real video rendering.
+Set GOOGLE_APPLICATION_CREDENTIALS to a valid service-account JSON file
+to enable real Text-to-Speech narration.
 """
 import os
 import struct
@@ -137,7 +136,6 @@ class VideoRenderer:
         try:
             return self._google_tts(text)
         except Exception:
-            # TODO: investigate TTS failure and add real credentials.
             return _silent_pcm(seconds=self._frame_dur)
 
     @staticmethod
@@ -149,7 +147,7 @@ class VideoRenderer:
           - ``GOOGLE_APPLICATION_CREDENTIALS`` env-var pointing to a service
             account JSON key file.
 
-        TODO: Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/service_account.json
+        Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/service_account.json
         """
         from google.cloud import texttospeech  # type: ignore
 
@@ -218,7 +216,7 @@ class VideoRenderer:
                         "[bg][fg]overlay=0:0:format=auto[v]"
                     ),
                     "-map", "[v]", "-map", "2:a",
-                    "-c:v", "libx264",
+                    "-c:v", "libx264", "-r", "30",
                     "-c:a", "aac", "-b:a", "192k",
                     "-t", str(dur),
                     "-pix_fmt", "yuv420p",
