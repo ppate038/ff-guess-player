@@ -373,8 +373,8 @@ with tempfile.TemporaryDirectory() as tmp:
     click_wav = os.path.join(tmp, "clicks.wav")
     _build_click_track(click_wav, sum(DURATIONS), clicks)
 
-    # Build position-specific jingle ("Who's that... Wide Receiver!")
-    jingle = _build_position_jingle(position, tmp) or _JINGLE_PATH
+    # Use original Who's That Pokemon jingle
+    jingle = _JINGLE_PATH
     if os.path.exists(jingle):
         # Mix click track + position jingle (jingle at full vol, clicks at 70%)
         subprocess.run(
