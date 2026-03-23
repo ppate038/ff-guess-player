@@ -239,24 +239,17 @@ class FrameBuilder:
         img  = self._red_canvas()
         draw = ImageDraw.Draw(img)
 
-        por_cy   = int(self._h * 0.365)
-        por_size = 600
-        px = (self._w - por_size) // 2
-        py = por_cy - por_size // 2 + 10
+        # Match silhouette frame exactly — same size + position for seamless cut
+        sil_cy   = int(self._h * 0.365)
+        por_size = 620
+        sx = (self._w - por_size) // 2
+        sy = sil_cy - por_size // 2 + 20
 
-        # White circle background so dark headshots look clean
-        draw.ellipse([(px, py), (px + por_size, py + por_size)], fill=_WHITE)
-
-        # Fit portrait into square, then crop to circle
-        por_rgb    = portrait.convert("RGB")
-        por_square = self._fill_square(por_rgb, por_size)
-        por_circle = self._crop_circle(por_square, por_size)
-        img.paste(por_circle, (px, py), mask=por_circle.split()[3])
-
-        # Gold ring border
+        # Color cutout: remove bg, keep player in full color on red canvas
+        cutout = self._make_color_cutout(portrait)
+        cutout = cutout.resize((por_size, por_size), Image.LANCZOS)
+        img.paste(cutout, (sx, sy), mask=cutout.split()[3])
         draw = ImageDraw.Draw(img)
-        draw.ellipse([(px - 6, py - 6), (px + por_size + 6, py + por_size + 6)],
-                     outline=_GOLD, width=8)
 
         # Consistent header with glow
         title_text = f"GUESS THAT {pos_label}?"
@@ -351,6 +344,36 @@ class FrameBuilder:
         result.paste(navy, mask=alpha)
         return result
 
+    def _make_color_cutout(self, img: Image.Image) -> Image.Image:
+        """Remove dark/white studio background from headshot; keep player in color.
+
+        Uses the same BFS approach as the navy silhouette but preserves the
+        original pixel colours — producing a colour cutout on a transparent bg.
+        """
+        rgba   = img.convert("RGBA")
+        w, h   = rgba.size
+        pixels = rgba.load()
+
+        queue   = deque()
+        visited = set()
+        for corner in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+            queue.append(corner)
+            visited.add(corner)
+
+        while queue:
+            x, y = queue.popleft()
+            r, g, b, a = pixels[x, y]
+            brightness = (int(r) + int(g) + int(b)) / 3
+            # Remove very dark (black studio bg) or very light (white bg) pixels
+            if brightness < 50 or brightness > 215:
+                pixels[x, y] = (0, 0, 0, 0)
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in visited:
+                        visited.add((nx, ny))
+                        queue.append((nx, ny))
+
+        return rgba
+
     # ------------------------------------------------------------------
     # Drawing — backgrounds & effects
     # ------------------------------------------------------------------
@@ -378,8 +401,8 @@ class FrameBuilder:
     def _draw_week_badge(
         self, draw: ImageDraw.ImageDraw, week: int, season: int, y: int
     ) -> None:
-        """Dark pill label showing season + week number."""
-        text = f"{season}  •  WEEK {week}"
+        """Dark pill label showing season and optionally week number."""
+        text = f"{season}" if week == 0 else f"{season}  •  WEEK {week}"
         font = _f(44)
         bbox = draw.textbbox((0, 0), text, font=font)
         tw   = bbox[2] - bbox[0]
