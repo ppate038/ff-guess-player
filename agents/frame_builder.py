@@ -364,8 +364,9 @@ class FrameBuilder:
     def _make_color_cutout(self, img: Image.Image) -> Image.Image:
         """Remove dark/white studio background from headshot; keep player in color.
 
-        Uses the same BFS approach as the navy silhouette but preserves the
-        original pixel colours — producing a colour cutout on a transparent bg.
+        BFS from corners removes only truly black/white pixels (threshold < 10),
+        then the alpha edge is blurred + re-thresholded to clean up JPEG
+        compression fringe without bleeding into dark hair/skin.
         """
         rgba   = img.convert("RGBA")
         w, h   = rgba.size
@@ -381,15 +382,19 @@ class FrameBuilder:
             x, y = queue.popleft()
             r, g, b, a = pixels[x, y]
             brightness = (int(r) + int(g) + int(b)) / 3
-            # Tight threshold: only remove near-pure black (studio bg) or near-pure white
-            # Dark skin/uniform is typically brightness 30+, so < 20 is safe
-            if brightness < 20 or brightness > 230:
+            # Only truly black (< 10) or truly white (> 240) pixels
+            if brightness < 10 or brightness > 240:
                 pixels[x, y] = (0, 0, 0, 0)
                 for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
                     if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in visited:
                         visited.add((nx, ny))
                         queue.append((nx, ny))
 
+        # Clean up JPEG fringe: blur alpha then re-threshold to harden the edge
+        _, _, _, alpha = rgba.split()
+        alpha = alpha.filter(ImageFilter.GaussianBlur(2))
+        alpha = alpha.point(lambda p: 0 if p < 180 else 255)
+        rgba.putalpha(alpha)
         return rgba
 
     # ------------------------------------------------------------------
