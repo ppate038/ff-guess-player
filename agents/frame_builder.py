@@ -295,7 +295,7 @@ class FrameBuilder:
         return img
 
     def _cta_frame(self) -> Image.Image:
-        img  = Image.new("RGB", (self._w, self._h), _DARK_BG)
+        img  = Image.new("RGBA", (self._w, self._h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         cy   = self._h // 2
 
@@ -402,12 +402,8 @@ class FrameBuilder:
     # ------------------------------------------------------------------
 
     def _red_canvas(self) -> Image.Image:
-        img  = Image.new("RGB", (self._w, self._h), _POKE_RED)
-        draw = ImageDraw.Draw(img)
-        pts  = [(self._w * 0.35, 0), (self._w, 0),
-                (self._w, self._h * 0.55), (self._w * 0.6, self._h * 0.55)]
-        draw.polygon(pts, fill=_POKE_RED_LIGHT)
-        return img
+        """Transparent RGBA canvas — starburst GIF background added by VideoRenderer."""
+        return Image.new("RGBA", (self._w, self._h), (0, 0, 0, 0))
 
     def _draw_burst(self, draw: ImageDraw.ImageDraw, cx: int, cy: int) -> None:
         """White jagged star burst (Pokemon style) with cyan inner circle."""
@@ -524,10 +520,14 @@ class FrameBuilder:
         gd.text((x, y), text, font=font, fill=(*gc, 200))
         glow = glow.filter(ImageFilter.GaussianBlur(glow_radius))
 
-        base = img.convert("RGBA")
-        base.alpha_composite(glow)
-        base.alpha_composite(glow)   # second pass for intensity
-        img.paste(base.convert("RGB"))
+        if img.mode == "RGBA":
+            img.alpha_composite(glow)
+            img.alpha_composite(glow)  # second pass for intensity
+        else:
+            base = img.convert("RGBA")
+            base.alpha_composite(glow)
+            base.alpha_composite(glow)
+            img.paste(base.convert("RGB"))
 
         draw = ImageDraw.Draw(img)
         for dx in range(-thickness, thickness + 1):

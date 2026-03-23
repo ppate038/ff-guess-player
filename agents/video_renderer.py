@@ -19,6 +19,9 @@ from pathlib import Path
 
 import config
 
+_PROJ_ROOT = os.path.join(os.path.dirname(__file__), "..")
+_DEFAULT_GIF = os.path.join(_PROJ_ROOT, "assets", "starburst.gif")
+
 # Narration scripts for each of the 8 frames.
 _TITLE_SCRIPT = "Welcome to Guess That Player! Can you figure out who it is?"
 _SUSPENSE_SCRIPT = "You've seen all the clues — drop your guess below!"
@@ -38,10 +41,12 @@ class VideoRenderer:
         audio_dir: str = config.AUDIO_DIR,
         output_dir: str = config.OUTPUT_DIR,
         frame_duration_s: float = 4.0,
+        gif_path: str = _DEFAULT_GIF,
     ) -> None:
         self._audio_dir = audio_dir
         self._output_dir = output_dir
         self._frame_dur = frame_duration_s
+        self._gif_path = gif_path if os.path.exists(gif_path) else None
         os.makedirs(audio_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -199,23 +204,40 @@ class VideoRenderer:
         for idx, (frame, audio) in enumerate(zip(frame_paths, audio_paths)):
             seg_path = str(tmp_dir / f"seg_{idx:02d}.mp4")
             dur = _wav_duration(audio)
-            subprocess.run(
-                [
+            if self._gif_path:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-stream_loop", "-1", "-t", str(dur), "-i", self._gif_path,
+                    "-loop", "1", "-t", str(dur), "-i", frame,
+                    "-i", audio,
+                    "-filter_complex",
+                    (
+                        "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+                        "crop=1080:1920,setpts=PTS-STARTPTS[bg];"
+                        "[1:v]format=rgba,setpts=PTS-STARTPTS[fg];"
+                        "[bg][fg]overlay=0:0:format=auto[v]"
+                    ),
+                    "-map", "[v]", "-map", "2:a",
+                    "-c:v", "libx264",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-t", str(dur),
+                    "-pix_fmt", "yuv420p",
+                    seg_path,
+                ]
+            else:
+                cmd = [
                     "ffmpeg", "-y",
                     "-loop", "1",
                     "-i", frame,
                     "-i", audio,
                     "-c:v", "libx264",
                     "-tune", "stillimage",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
+                    "-c:a", "aac", "-b:a", "192k",
                     "-t", str(dur),
                     "-pix_fmt", "yuv420p",
                     seg_path,
-                ],
-                check=True,
-                capture_output=True,
-            )
+                ]
+            subprocess.run(cmd, check=True, capture_output=True)
             segment_paths.append(seg_path)
 
         # Write concat list
