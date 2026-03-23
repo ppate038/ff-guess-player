@@ -181,21 +181,13 @@ class FrameBuilder:
                 draw.rectangle([(60, row_y - 2), (self._w - 60, row_y + 2)],
                                fill=(255, 255, 255, 80))
 
-            # Gold left accent bar
-            draw.rectangle([(40, row_y + 14), (48, row_y + row_h - 14)], fill=_GOLD)
-
-            # Stat number tag
-            self._draw_outlined(draw, f"0{i+1}",
-                                y=row_y + 14, font=_f(54),
-                                fill=_GOLD, outline=(0, 0, 0), thickness=6)
-
-            # Stat text — auto-sized single line
+            # Stat text — centered, auto-sized
             font_size = self._fit_font_size(draw, stat.upper(),
-                                            max_w=840, max_size=76, min_size=44)
+                                            max_w=980, max_size=76, min_size=44)
             line_h    = font_size + 16
             text_y    = row_y + (row_h - line_h) // 2
             self._draw_outlined(draw, stat.upper(),
-                                x_override=130, y=text_y,
+                                y=text_y,
                                 font=_f(font_size), fill=_WHITE,
                                 outline=(0, 0, 0), thickness=7)
 
@@ -300,11 +292,10 @@ class FrameBuilder:
         self._text_c(draw, "STATS REVEALED:", y=recap_y, font=_f(46), color=_GREY)
         for i, stat in enumerate(stats):
             ry = recap_y + 66 + i * 88
-            draw.ellipse([(55, ry + 18), (67, ry + 30)], fill=_GOLD)
             font_size = self._fit_font_size(draw, stat.upper(),
-                                            max_w=940, max_size=52, min_size=32)
+                                            max_w=980, max_size=52, min_size=32)
             self._draw_outlined(draw, stat.upper(),
-                                x_override=82, y=ry,
+                                y=ry,
                                 font=_f(font_size), fill=_WHITE,
                                 outline=(0, 0, 0), thickness=5)
 
@@ -323,8 +314,8 @@ class FrameBuilder:
                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE)
         self._draw_outlined(draw, "SUBSCRIBE", y=cy + 10,  font=_f(130),
                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE)
-        self._text_c(draw, "WEEKLY GUESS THAT PLAYER 🏈", y=cy + 160, font=_f(52), color=_WHITE)
-        self._text_c(draw, "👇 COMMENT YOUR ANSWER 👇",  y=cy + 238, font=_f(50), color=_GREY)
+        self._text_c(draw, "WHERE ARE YOU DRAFTING HIM NEXT YEAR?",
+                     y=cy + 200, font=_f(46), color=_WHITE)
         return img
 
     # ------------------------------------------------------------------

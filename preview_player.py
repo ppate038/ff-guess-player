@@ -210,10 +210,9 @@ def _fmt_stat_lines(r: dict, mode: str, wk) -> list[str]:
         ]
     # Season mode
     pos_rank = r.get("pos_rank_label", "")
-    div_short = r.get("division", "").replace(" North","").replace(" South","").replace(" East","").replace(" West","")
     yr = r.get("year_label", "2024")
     return [
-        f"{r['games']} games  |  {div_short}  ({yr})",
+        f"{r['games']} games played  ({yr})",
         f"{r['pts_per_game']:.1f} PPR pts / game",
         f"{r['rec_yd_per_game']:.0f} rec yd/g  |  {r['rec_total']} catches" if r.get("rec_total") else f"{r.get('pass_yd_per_game',0):.0f} pass yd/g  |  {r.get('pass_td_total',0)} TDs",
         pos_rank if pos_rank else f"{r['pts_total']:.0f} total PPR pts",
