@@ -320,10 +320,25 @@ with tempfile.TemporaryDirectory() as tmp:
     click_wav = os.path.join(tmp, "clicks.wav")
     _build_click_track(click_wav, sum(DURATIONS), clicks)
 
-    subprocess.run(
-        [FFMPEG, "-y", "-i", silent, "-i", click_wav,
-         "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest", OUT_PATH],
-        check=True, capture_output=True,
-    )
+    _POKEMON_MP3 = os.path.join(os.path.dirname(__file__), "assets", "whos-that-pokemon.mp3")
+    if os.path.exists(_POKEMON_MP3):
+        # Mix click track + Pokemon jingle (jingle at full vol, clicks at 70%)
+        subprocess.run(
+            [FFMPEG, "-y",
+             "-i", silent,
+             "-i", click_wav,
+             "-i", _POKEMON_MP3,
+             "-filter_complex",
+             "[1:a]volume=0.7[clicks];[2:a]volume=1.0[jingle];[clicks][jingle]amix=inputs=2:duration=first[a]",
+             "-map", "0:v", "-map", "[a]",
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest", OUT_PATH],
+            check=True, capture_output=True,
+        )
+    else:
+        subprocess.run(
+            [FFMPEG, "-y", "-i", silent, "-i", click_wav,
+             "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest", OUT_PATH],
+            check=True, capture_output=True,
+        )
 
 print(f"\nDone! Video saved: {OUT_PATH}")
