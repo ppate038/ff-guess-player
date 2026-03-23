@@ -370,12 +370,19 @@ class FrameBuilder:
         return result
 
     def _make_color_cutout(self, img: Image.Image) -> Image.Image:
-        """Remove dark/white studio background from headshot; keep player in color.
+        """Remove studio background from headshot; keep player in color.
 
-        BFS from corners removes only truly black/white pixels (threshold < 10),
-        then the alpha edge is blurred + re-thresholded to clean up JPEG
-        compression fringe without bleeding into dark hair/skin.
+        Uses rembg (AI-based matting) when available — handles dark hair on
+        dark backgrounds correctly. Falls back to BFS brightness threshold.
         """
+        try:
+            from rembg import remove as rembg_remove
+            result = rembg_remove(img.convert("RGBA"))
+            return result.convert("RGBA")
+        except Exception:
+            pass
+
+        # BFS fallback — may clip dark hair on dark backgrounds
         rgba   = img.convert("RGBA")
         w, h   = rgba.size
         pixels = rgba.load()
@@ -390,7 +397,6 @@ class FrameBuilder:
             x, y = queue.popleft()
             r, g, b, a = pixels[x, y]
             brightness = (int(r) + int(g) + int(b)) / 3
-            # Only truly black (< 10) or truly white (> 240) pixels
             if brightness < 10 or brightness > 240:
                 pixels[x, y] = (0, 0, 0, 0)
                 for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
@@ -398,7 +404,6 @@ class FrameBuilder:
                         visited.add((nx, ny))
                         queue.append((nx, ny))
 
-        # Clean up JPEG fringe: blur alpha then re-threshold to harden the edge
         _, _, _, alpha = rgba.split()
         alpha = alpha.filter(ImageFilter.GaussianBlur(2))
         alpha = alpha.point(lambda p: 0 if p < 180 else 255)
