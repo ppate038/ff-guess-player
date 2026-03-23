@@ -19,7 +19,7 @@ import tempfile
 import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
-_JINGLE_PATH  = os.path.join(os.path.dirname(__file__), "assets", "whos-that-pokemon.mp3")
+_JINGLE_PATH  = os.path.join(os.path.dirname(__file__), "assets", "whos-that-pokemon-v2.mp3")
 _SPLICE_AT    = 2.54   # seconds — pause right before "Pokémon!" in the original jingle
 
 
@@ -94,7 +94,9 @@ FFMPEG = (
     r"\ffmpeg-7.1-full_build\bin\ffmpeg.exe"
 )
 
-DURATIONS = [1.8, 2.2, 2.2, 2.2, 2.2, 3.5, 4.0, 3.0]
+# Synced to 17.48s music: hook 3s, clues 3-10s, reveal at 10s, no suspense frame
+# Frame order: hook, clue×4, reveal, CTA  (suspense frame skipped)
+DURATIONS = [3.0, 1.5, 1.5, 1.5, 2.5, 4.0, 3.48]
 
 if WEEK:
     mode = f"week {WEEK} of {SEASON}"
@@ -139,30 +141,41 @@ _DIVISIONS = {
 }
 
 def _fetch_season(year: int):
-    """Aggregate stats for one season. Returns (agg_dict, games_played, pos_totals).
+    """Aggregate stats for one season. Returns (agg_dict, games_played, pos_totals, top10_count).
 
     pos_totals maps player_id -> total PPR pts for same-position players — used
     to compute the target player's position rank.
+    top10_count is the number of weeks the target player finished top-10 at their position.
     """
     agg: dict = {}
     games = 0
     pos_totals: dict[str, float] = {}
+    top10_count = 0
 
     print(f"Fetching {year} season stats (weeks 1–18)...")
     for wk in range(1, 19):
         try:
             performers = sleeper.get_top_performers(year, wk, top_n=500)
+
+            # Collect same-position players sorted by PPR to determine top-10
+            pos_week: list[tuple[str, float]] = []
             for p in performers:
                 pid = p.get("player_id")
                 if not pid:
                     continue
                 p_pos = all_players.get(pid, {}).get("position", "")
                 if p_pos == position and p.get("pts_ppr", 0) > 0:
-                    pos_totals[pid] = pos_totals.get(pid, 0) + p.get("pts_ppr", 0)
+                    pts = p.get("pts_ppr", 0)
+                    pos_totals[pid] = pos_totals.get(pid, 0) + pts
+                    pos_week.append((pid, pts))
+
+            top10_ids = {pid for pid, _ in sorted(pos_week, key=lambda x: x[1], reverse=True)[:10]}
 
             target = next((p for p in performers if p["player_id"] == match_id), None)
             if target and target.get("pts_ppr", 0) > 0:
                 games += 1
+                if match_id in top10_ids:
+                    top10_count += 1
                 for k, v in target.items():
                     if k != "player_id" and isinstance(v, (int, float)):
                         agg[k] = agg.get(k, 0) + v
@@ -170,7 +183,7 @@ def _fetch_season(year: int):
         except Exception:
             pass
 
-    return agg, games, pos_totals
+    return agg, games, pos_totals, top10_count
 
 
 if WEEK:
@@ -192,10 +205,12 @@ else:
     combined_agg: dict = {}
     total_games = 0
     combined_pos_totals: dict[str, float] = {}
+    total_top10 = 0
 
     for yr in years:
-        agg, games, pos_totals = _fetch_season(yr)
+        agg, games, pos_totals, top10_count = _fetch_season(yr)
         total_games += games
+        total_top10 += top10_count
         for k, v in agg.items():
             combined_agg[k] = combined_agg.get(k, 0) + v
         for pid, pts in pos_totals.items():
@@ -223,10 +238,12 @@ else:
 
     raw = {
         "position": position, "division": division, "games": total_games,
+        "top10_count": total_top10,
         "pts_total": combined_agg.get("pts_ppr", 0),
         "pts_per_game": per_game("pts_ppr"),
         "rec_yd_per_game": per_game("rec_yd"),
         "rec_total": int(combined_agg.get("rec", 0)),
+        "rush_yd_total": int(combined_agg.get("rush_yd", 0)),
         "rush_yd_per_game": per_game("rush_yd"),
         "rush_td_total": int(combined_agg.get("rush_td", 0)),
         "pass_yd_per_game": per_game("pass_yd"),
@@ -264,6 +281,16 @@ def _fmt_stat_lines(r: dict, mode: str, wk) -> list[str]:
     # Season mode
     pos_rank = r.get("pos_rank_label", "")
     yr = r.get("year_label", "2024")
+    pos = r.get("position", "")
+    if pos == "RB":
+        top10 = r.get("top10_count", 0)
+        rush_total = r.get("rush_yd_total", 0)
+        return [
+            f"{top10} top-10 RB weeks",
+            f"{r['pts_per_game']:.1f} PPR pts / game",
+            f"{rush_total} total rush yards",
+            pos_rank if pos_rank else f"{r['pts_total']:.0f} total PPR pts",
+        ]
     return [
         f"{r['games']} games played  ({yr})",
         f"{r['pts_per_game']:.1f} PPR pts / game",
@@ -319,9 +346,12 @@ _GIF_PATH = os.path.join(os.path.dirname(__file__), "assets", "starburst.gif")
 _USE_GIF  = os.path.exists(_GIF_PATH)
 
 print("Rendering video...")
+# Skip suspense frame (index 5) — hook(0), clues(1-4), reveal(6), CTA(7)
+_ACTIVE_FRAMES = [paths[i] for i in [0, 1, 2, 3, 4, 6, 7]]
+
 with tempfile.TemporaryDirectory() as tmp:
     segments = []
-    for idx, (fp, dur) in enumerate(zip(paths, DURATIONS)):
+    for idx, (fp, dur) in enumerate(zip(_ACTIVE_FRAMES, DURATIONS)):
         seg = os.path.join(tmp, f"seg_{idx:02d}.mp4")
         if _USE_GIF:
             cmd = [

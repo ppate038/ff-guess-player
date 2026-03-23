@@ -150,9 +150,6 @@ class FrameBuilder:
                             font=_f(title_size), fill=_POKE_YELLOW,
                             outline=_POKE_OUTLINE, thickness=12)
 
-        # Season/week pill badge
-        self._draw_week_badge(draw, week, season, y=18 + title_size + 8)
-
         # Big "?" on hook frame — with strong glow
         if show_q:
             q_font = _f(480)
@@ -168,21 +165,10 @@ class FrameBuilder:
         row_h     = 230
         stats_top = self._h - (4 * row_h) - 30
 
-        # Semi-transparent dark panel behind stats for readability on any background
-        stats_panel = Image.new("RGBA", (self._w, 4 * row_h + 50), (0, 0, 0, 170))
-        img.alpha_composite(stats_panel, (0, stats_top - 20))
         draw = ImageDraw.Draw(img)
-
-        if visible_stats:
-            draw.rectangle([(40, stats_top - 7), (self._w - 40, stats_top - 3)],
-                           fill=_GOLD)
 
         for i, stat in enumerate(visible_stats):
             row_y = stats_top + i * row_h
-
-            if i > 0:
-                draw.rectangle([(60, row_y - 2), (self._w - 60, row_y + 2)],
-                               fill=(255, 255, 255, 80))
 
             # Stat text — centered, auto-sized
             font_size = self._fit_font_size(draw, stat.upper(),
@@ -193,9 +179,6 @@ class FrameBuilder:
                                 y=text_y,
                                 font=_f(font_size), fill=_WHITE,
                                 outline=(0, 0, 0), thickness=7)
-
-        # Progress dots at very bottom
-        self._draw_progress_dots(draw, total=4, filled=len(visible_stats))
 
         return img
 
@@ -211,7 +194,6 @@ class FrameBuilder:
                   mask=sil.split()[3])
 
         text_y = int(self._h * 0.72)
-        draw.rectangle([(40, text_y - 8), (self._w - 40, text_y - 4)], fill=_GOLD)
 
         # "WHO IS IT??" — large Bebas Neue, yellow with thick navy outline
         self._draw_outlined(draw, "WHO IS IT??", y=text_y,
@@ -221,8 +203,6 @@ class FrameBuilder:
         self._draw_outlined(draw, "DROP YOUR GUESS BELOW",
                             y=text_y + 155, font=_f(56),
                             fill=_WHITE, outline=(0, 0, 0), thickness=6)
-
-        self._draw_progress_dots(draw, total=4, filled=4)
 
         return img
 
@@ -248,47 +228,41 @@ class FrameBuilder:
         # Color cutout: BFS removes near-pure black/white background, keeps player
         cutout = self._make_color_cutout(portrait)
         cutout = cutout.resize((por_size, por_size), Image.LANCZOS)
+
+        # Dark glow behind player so they pop off the busy starburst background
+        alpha = cutout.split()[3]
+        glow_alpha = alpha.filter(ImageFilter.GaussianBlur(18))
+        glow_alpha = glow_alpha.point(lambda p: min(int(p * 1.8), 220))
+        glow = Image.new("RGBA", cutout.size, (0, 0, 0, 0))
+        glow.putalpha(glow_alpha)
+        img.paste(glow, (sx, sy), mask=glow_alpha)
+
         img.paste(cutout, (sx, sy), mask=cutout.split()[3])
         draw = ImageDraw.Draw(img)
 
-        # Consistent header — large Bebas Neue, yellow with thick navy outline
         draw = ImageDraw.Draw(img)
-        title_text = f"GUESS THAT {pos_label}?"
-        title_size = self._fit_font_size(draw, title_text, max_w=1020, max_size=128, min_size=72)
-        self._draw_outlined(draw, title_text, y=18,
-                            font=_f(title_size), fill=_POKE_YELLOW,
-                            outline=_POKE_OUTLINE, thickness=12)
-        self._draw_week_badge(draw, week, season, y=18 + title_size + 8)
 
+        # Top: "IT'S..." + player name (replaces title)
+        self._draw_outlined(draw, "IT'S...", y=18, font=_f(72),
+                            fill=_WHITE, outline=(0, 0, 0), thickness=8)
+        name_size = self._fit_font_size(draw, player_name.upper(), max_w=1020, max_size=128, min_size=72)
+        self._draw_glow_text(img, player_name.upper(),
+                             (self._w - draw.textbbox((0, 0), player_name.upper(), font=_f(name_size))[2]) // 2,
+                             18 + 80, _f(name_size),
+                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE, glow_color=_POKE_YELLOW, glow_radius=32)
+        draw = ImageDraw.Draw(img)
+
+        # Bottom stats — same large outlined style as clue frames
         row_h     = 230
         stats_top = self._h - (4 * row_h) - 30
-
-        draw.rectangle([(40, stats_top - 7), (self._w - 40, stats_top - 3)], fill=_GOLD)
-
-        self._draw_outlined(draw, "IT'S...",
-                            y=stats_top + 22, font=_f(64),
-                            fill=_WHITE, outline=(0, 0, 0), thickness=6)
-
-        # Player name with gold glow
-        name_font = _f(120)
-        bbox  = draw.textbbox((0, 0), player_name.upper(), font=name_font)
-        nx    = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, player_name.upper(), nx, stats_top + 100, name_font,
-                             fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
-                             glow_color=_POKE_YELLOW, glow_radius=32)
-        draw = ImageDraw.Draw(img)
-
-        # Compact stats recap
-        recap_y = stats_top + 250
-        self._text_c(draw, "STATS REVEALED:", y=recap_y, font=_f(46), color=_GREY)
         for i, stat in enumerate(stats):
-            ry = recap_y + 66 + i * 88
-            font_size = self._fit_font_size(draw, stat.upper(),
-                                            max_w=980, max_size=52, min_size=32)
-            self._draw_outlined(draw, stat.upper(),
-                                y=ry,
+            row_y = stats_top + i * row_h
+            font_size = self._fit_font_size(draw, stat.upper(), max_w=980, max_size=76, min_size=44)
+            line_h = font_size + 16
+            text_y = row_y + (row_h - line_h) // 2
+            self._draw_outlined(draw, stat.upper(), y=text_y,
                                 font=_f(font_size), fill=_WHITE,
-                                outline=(0, 0, 0), thickness=5)
+                                outline=(0, 0, 0), thickness=7)
 
         return img
 
@@ -301,9 +275,6 @@ class FrameBuilder:
         panel = Image.new("RGBA", (self._w, 560), (0, 0, 0, 160))
         img.alpha_composite(panel, (0, cy - 290))
         draw = ImageDraw.Draw(img)
-
-        draw.rectangle([(0, cy - 290), (self._w, cy - 284)], fill=_GOLD)
-        draw.rectangle([(0, cy + 260), (self._w, cy + 266)], fill=_GOLD)
 
         self._draw_outlined(draw, "DID YOU GET IT RIGHT?",
                             y=cy - 258, font=_f(66),
@@ -378,6 +349,10 @@ class FrameBuilder:
         try:
             from rembg import remove as rembg_remove
             result = rembg_remove(img.convert("RGBA"))
+            # Harden semi-transparent edges so they don't bleed into busy backgrounds
+            r, g, b, a = result.split()
+            a = a.point(lambda p: min(int(p * 1.5), 255))
+            result = Image.merge("RGBA", (r, g, b, a))
             return result.convert("RGBA")
         except Exception:
             pass
