@@ -46,8 +46,13 @@ def _build_position_jingle(position: str, tmp_dir: str) -> str | None:
             check=True, capture_output=True,
         )
 
-        # 2 — TTS: generate "{POSITION}!" in a hype voice
-        pos_text = f"{position.title()}!"
+        # 2 — TTS: generate full position name, not abbreviation
+        _POS_NAMES = {
+            "QB": "Quarterback", "RB": "Running Back",
+            "WR": "Wide Receiver", "TE": "Tight End",
+            "K":  "Kicker",       "DEF": "Defense",
+        }
+        pos_text = f"{_POS_NAMES.get(position.upper(), position)}!"
         tts_mp3  = os.path.join(tmp_dir, "position_tts.mp3")
         gTTS(text=pos_text, lang="en", tld="com", slow=False).save(tts_mp3)
 
