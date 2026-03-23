@@ -88,23 +88,25 @@ class FrameBuilder:
         portrait_path: str,
         week: int = config.WEEK,
         season: int = config.SEASON_YEAR,
+        position: str = "PLAYER",
     ) -> list[str]:
         """Build and save 8 frames. stats must contain exactly 4 items."""
         if len(stats) != 4:
             raise ValueError(f"build_frames requires exactly 4 stats, got {len(stats)}")
 
+        pos_label = position.upper() if position else "PLAYER"
         raw_img  = self._load_img(silhouette_path)
         por_img  = self._load_img(portrait_path)
         navy_sil = self._make_navy_silhouette(raw_img)
 
         builders = [
-            lambda: self._poke_frame(navy_sil, [], week, season, show_q=True),
-            lambda: self._poke_frame(navy_sil, stats[:1], week, season),
-            lambda: self._poke_frame(navy_sil, stats[:2], week, season),
-            lambda: self._poke_frame(navy_sil, stats[:3], week, season),
-            lambda: self._poke_frame(navy_sil, stats[:4], week, season),
-            lambda: self._suspense_frame(navy_sil),
-            lambda: self._reveal_frame(player_name, por_img, stats, week, season),
+            lambda: self._poke_frame(navy_sil, [], week, season, show_q=True, pos_label=pos_label),
+            lambda: self._poke_frame(navy_sil, stats[:1], week, season, pos_label=pos_label),
+            lambda: self._poke_frame(navy_sil, stats[:2], week, season, pos_label=pos_label),
+            lambda: self._poke_frame(navy_sil, stats[:3], week, season, pos_label=pos_label),
+            lambda: self._poke_frame(navy_sil, stats[:4], week, season, pos_label=pos_label),
+            lambda: self._suspense_frame(navy_sil, pos_label=pos_label),
+            lambda: self._reveal_frame(player_name, por_img, stats, week, season, pos_label=pos_label),
             lambda: self._cta_frame(),
         ]
 
@@ -127,6 +129,7 @@ class FrameBuilder:
         week: int,
         season: int,
         show_q: bool = False,
+        pos_label: str = "PLAYER",
     ) -> Image.Image:
         """Frames 0–4: red Pokemon bg, burst, navy silhouette, progressive stats."""
         img  = self._red_canvas()
@@ -139,11 +142,12 @@ class FrameBuilder:
         sy  = sil_cy - sil_size // 2 + 20
         img.paste(sil, (sx, sy), mask=sil.split()[3])
 
-        # "GUESS THAT PLAYER?" header — with yellow glow
+        # "GUESS THAT WR?" header — with yellow glow
+        title_text = f"GUESS THAT {pos_label}?"
         title_font = _f(84)
-        bbox = draw.textbbox((0, 0), "GUESS THAT PLAYER?", font=title_font)
+        bbox = draw.textbbox((0, 0), title_text, font=title_font)
         tx   = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, "GUESS THAT PLAYER?", tx, 30, title_font,
+        self._draw_glow_text(img, title_text, tx, 30, title_font,
                              fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
                              glow_color=_POKE_YELLOW, glow_radius=28)
         draw = ImageDraw.Draw(img)
@@ -200,7 +204,7 @@ class FrameBuilder:
 
         return img
 
-    def _suspense_frame(self, navy_sil: Image.Image) -> Image.Image:
+    def _suspense_frame(self, navy_sil: Image.Image, pos_label: str = "PLAYER") -> Image.Image:
         """Frame 5 — burst + silhouette + 'WHO IS IT??'"""
         img  = self._red_canvas()
         draw = ImageDraw.Draw(img)
@@ -237,24 +241,37 @@ class FrameBuilder:
         stats: list[str],
         week: int,
         season: int,
+        pos_label: str = "PLAYER",
     ) -> Image.Image:
         """Frame 6 — same red starburst, real photo in burst circle, name + stats recap."""
         img  = self._red_canvas()
         draw = ImageDraw.Draw(img)
 
-        por_cy     = int(self._h * 0.365)
-        por_size   = 600
-        por        = self._fit_img(portrait.convert("RGB"), por_size, por_size)
-        por_circle = self._crop_circle(por, por_size)
+        por_cy   = int(self._h * 0.365)
+        por_size = 600
         px = (self._w - por_size) // 2
         py = por_cy - por_size // 2 + 10
+
+        # White circle background so dark headshots look clean
+        draw.ellipse([(px, py), (px + por_size, py + por_size)], fill=_WHITE)
+
+        # Fit portrait into square, then crop to circle
+        por_rgb    = portrait.convert("RGB")
+        por_square = self._fill_square(por_rgb, por_size)
+        por_circle = self._crop_circle(por_square, por_size)
         img.paste(por_circle, (px, py), mask=por_circle.split()[3])
 
+        # Gold ring border
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([(px - 6, py - 6), (px + por_size + 6, py + por_size + 6)],
+                     outline=_GOLD, width=8)
+
         # Consistent header with glow
+        title_text = f"GUESS THAT {pos_label}?"
         title_font = _f(84)
-        bbox = ImageDraw.Draw(img).textbbox((0, 0), "GUESS THAT PLAYER?", font=title_font)
+        bbox = draw.textbbox((0, 0), title_text, font=title_font)
         tx   = (self._w - (bbox[2] - bbox[0])) // 2
-        self._draw_glow_text(img, "GUESS THAT PLAYER?", tx, 30, title_font,
+        self._draw_glow_text(img, title_text, tx, 30, title_font,
                              fill=_POKE_YELLOW, outline=_POKE_OUTLINE,
                              glow_color=_POKE_YELLOW, glow_radius=28)
         draw = ImageDraw.Draw(img)
@@ -510,6 +527,16 @@ class FrameBuilder:
         if os.path.exists(path):
             return Image.open(path).convert("RGBA")
         return Image.new("RGBA", (400, 400), (80, 80, 80, 255))
+
+    def _fill_square(self, img: Image.Image, size: int) -> Image.Image:
+        """Scale image so the shorter side fills `size`, then center-crop to size×size."""
+        ratio = max(size / img.width, size / img.height)
+        new_w = int(img.width  * ratio)
+        new_h = int(img.height * ratio)
+        img   = img.resize((new_w, new_h), Image.LANCZOS)
+        left  = (new_w - size) // 2
+        top   = (new_h - size) // 2
+        return img.crop((left, top, left + size, top + size))
 
     def _fit_img(self, img: Image.Image, max_w: int, max_h: int) -> Image.Image:
         ratio = min(max_w / img.width, max_h / img.height)

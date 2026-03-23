@@ -21,11 +21,11 @@ _WEEK_PROMPT = (
 _SEASON_PROMPT = (
     "Generate exactly 4 progressive trivia clues for a mystery NFL {position} "
     "in a 'Guess That Player' fantasy football video. "
-    "2024 season stats: {games} games, {pts_per_game:.1f} PPR pts/game, "
+    "{year_label} season stats: {games} games, {pts_per_game:.1f} PPR pts/game, "
     "{pts_total:.0f} total PPR pts, {rec_yd_per_game:.0f} rec yards/game, "
     "{rec_total} receptions, {rush_yd_per_game:.0f} rush yards/game, "
     "{rush_td_total} rush TDs, {pass_yd_per_game:.0f} pass yards/game, "
-    "{pass_td_total} pass TDs, {division}. "
+    "{pass_td_total} pass TDs, {division}{pos_rank_suffix}. "
     "Do NOT guess or name the player. Clue 1=vaguest, Clue 4=most specific (under 8 words each). "
     "Output exactly 4 lines, no other text:\\n"
     "Clue 1: [text]\\nClue 2: [text]\\nClue 3: [text]\\nClue 4: [text]"
@@ -61,9 +61,11 @@ class ClueWriter:
 
     def generate_season_clues(self, player_name: str, season_stats: dict) -> list[str]:
         """Return 4 clues for a full-season performance."""
+        pos_rank = season_stats.get("pos_rank_label", "")
         prompt = _SEASON_PROMPT.format(
             position=season_stats.get("position", "unknown"),
             division=season_stats.get("division", "unknown"),
+            year_label=season_stats.get("year_label", "2024"),
             games=season_stats.get("games", 0),
             pts_per_game=season_stats.get("pts_per_game", 0),
             pts_total=season_stats.get("pts_total", 0),
@@ -73,6 +75,7 @@ class ClueWriter:
             rush_td_total=season_stats.get("rush_td_total", 0),
             pass_yd_per_game=season_stats.get("pass_yd_per_game", 0),
             pass_td_total=season_stats.get("pass_td_total", 0),
+            pos_rank_suffix=f", {pos_rank}" if pos_rank else "",
         )
         return self._run(prompt)
 

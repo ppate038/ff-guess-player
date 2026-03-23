@@ -3,7 +3,12 @@
 Usage:
     python preview_player.py "Josh Allen" 2024          # full season stats
     python preview_player.py "Tyreek Hill" 2024 8       # single week stats
+    python preview_player.py "Ja'Marr Chase" 2024 2025  # multi-year combined
     python preview_player.py "Jalen Hurts"              # defaults: 2024 season
+
+Argument rules:
+  arg[3] >= 2000  → treated as a second season year (multi-year mode)
+  arg[3] 1–18    → treated as a week number (single-week mode)
 """
 import subprocess
 import sys
@@ -24,8 +29,11 @@ from agents.frame_builder import FrameBuilder
 
 PLAYER_SEARCH = sys.argv[1] if len(sys.argv) > 1 else "Tyreek Hill"
 SEASON        = int(sys.argv[2]) if len(sys.argv) > 2 else 2024
-# If week supplied → single-week mode; else → full season mode
-WEEK          = int(sys.argv[3]) if len(sys.argv) > 3 else None
+
+# Parse third arg: >= 2000 = second year; 1-18 = week number; absent = season mode
+_arg3 = int(sys.argv[3]) if len(sys.argv) > 3 else None
+SEASON2 = _arg3 if (_arg3 and _arg3 >= 2000) else None
+WEEK    = _arg3 if (_arg3 and _arg3 < 2000) else None
 
 FFMPEG = (
     r"C:\Users\Premal\AppData\Local\Microsoft\WinGet\Packages"
@@ -35,7 +43,13 @@ FFMPEG = (
 
 DURATIONS = [1.8, 2.2, 2.2, 2.2, 2.2, 3.5, 4.0, 3.0]
 
-mode = f"week {WEEK}" if WEEK else f"{SEASON} full season"
+if WEEK:
+    mode = f"week {WEEK} of {SEASON}"
+elif SEASON2:
+    mode = f"{SEASON}–{SEASON2} combined"
+else:
+    mode = f"{SEASON} full season"
+
 print(f"\n=== Guess That Player Preview ===")
 print(f"Player: {PLAYER_SEARCH} | {mode}\n")
 
@@ -63,6 +77,49 @@ team        = match_info.get("team", "unknown")
 print(f"Found: {player_name} ({position}, {team}) — ID: {match_id}")
 
 # ── 2. Fetch stats ────────────────────────────────────────────────────────
+
+_DIVISIONS = {
+    "NFC East": ["DAL","NYG","PHI","WAS"], "NFC North": ["CHI","DET","GB","MIN"],
+    "NFC South": ["ATL","CAR","NO","TB"],  "NFC West": ["ARI","LAR","SEA","SF"],
+    "AFC East": ["BUF","MIA","NE","NYJ"],  "AFC North": ["BAL","CIN","CLE","PIT"],
+    "AFC South": ["HOU","IND","JAX","TEN"],"AFC West": ["DEN","KC","LV","LAC"],
+}
+
+def _fetch_season(year: int):
+    """Aggregate stats for one season. Returns (agg_dict, games_played, pos_totals).
+
+    pos_totals maps player_id -> total PPR pts for same-position players — used
+    to compute the target player's position rank.
+    """
+    agg: dict = {}
+    games = 0
+    pos_totals: dict[str, float] = {}
+
+    print(f"Fetching {year} season stats (weeks 1–18)...")
+    for wk in range(1, 19):
+        try:
+            performers = sleeper.get_top_performers(year, wk, top_n=500)
+            for p in performers:
+                pid = p.get("player_id")
+                if not pid:
+                    continue
+                p_pos = all_players.get(pid, {}).get("position", "")
+                if p_pos == position and p.get("pts_ppr", 0) > 0:
+                    pos_totals[pid] = pos_totals.get(pid, 0) + p.get("pts_ppr", 0)
+
+            target = next((p for p in performers if p["player_id"] == match_id), None)
+            if target and target.get("pts_ppr", 0) > 0:
+                games += 1
+                for k, v in target.items():
+                    if k != "player_id" and isinstance(v, (int, float)):
+                        agg[k] = agg.get(k, 0) + v
+            print(f"  Week {wk}: {'played' if target and target.get('pts_ppr',0)>0 else 'no data'}")
+        except Exception:
+            pass
+
+    return agg, games, pos_totals
+
+
 if WEEK:
     # Single-week mode
     print(f"Fetching week {WEEK} stats...")
@@ -73,74 +130,99 @@ if WEEK:
         sys.exit(1)
     raw["position"] = position
     raw["team"]     = team
-    clue_mode = "week"
+    clue_mode    = "week"
     display_week = WEEK
 
 else:
-    # Season mode — aggregate weeks 1–18
-    print(f"Fetching {SEASON} season stats (weeks 1–18)...")
-    agg: dict = {}
-    games = 0
-    for wk in range(1, 19):
-        try:
-            performers = sleeper.get_top_performers(SEASON, wk, top_n=500)
-            p = next((x for x in performers if x["player_id"] == match_id), None)
-            if p and p.get("pts_ppr", 0) > 0:
-                games += 1
-                for k, v in p.items():
-                    if k != "player_id" and isinstance(v, (int, float)):
-                        agg[k] = agg.get(k, 0) + v
-            print(f"  Week {wk}: {'played' if p and p.get('pts_ppr',0)>0 else 'no data'}")
-        except Exception:
-            pass
+    # Season / multi-year mode
+    years = [SEASON] if not SEASON2 else [SEASON, SEASON2]
+    combined_agg: dict = {}
+    total_games = 0
+    combined_pos_totals: dict[str, float] = {}
 
-    if games == 0:
-        print(f"No season data found for {player_name} in {SEASON}.")
+    for yr in years:
+        agg, games, pos_totals = _fetch_season(yr)
+        total_games += games
+        for k, v in agg.items():
+            combined_agg[k] = combined_agg.get(k, 0) + v
+        for pid, pts in pos_totals.items():
+            combined_pos_totals[pid] = combined_pos_totals.get(pid, 0) + pts
+
+    if total_games == 0:
+        print(f"No season data found for {player_name}.")
         sys.exit(1)
 
-    def per_game(key):
-        return agg.get(key, 0) / games
+    # Position rank (lower = better)
+    sorted_pos = sorted(combined_pos_totals.items(), key=lambda x: x[1], reverse=True)
+    pos_rank = next(
+        (i + 1 for i, (pid, _) in enumerate(sorted_pos) if pid == match_id), None
+    )
+    pos_rank_label = f"#{pos_rank} {position} in PPR" if pos_rank else ""
 
-    # Determine division from team
-    _DIVISIONS = {
-        "NFC East": ["DAL","NYG","PHI","WAS"], "NFC North": ["CHI","DET","GB","MIN"],
-        "NFC South": ["ATL","CAR","NO","TB"],  "NFC West": ["ARI","LAR","SEA","SF"],
-        "AFC East": ["BUF","MIA","NE","NYJ"],  "AFC North": ["BAL","CIN","CLE","PIT"],
-        "AFC South": ["HOU","IND","JAX","TEN"],"AFC West": ["DEN","KC","LV","LAC"],
-    }
+    def per_game(key):
+        return combined_agg.get(key, 0) / total_games
+
     division = next(
         (d for d, teams in _DIVISIONS.items() if team in teams), "unknown division"
     )
 
+    year_label = f"{SEASON}" if not SEASON2 else f"{SEASON}-{SEASON2}"
+
     raw = {
-        "position": position, "division": division, "games": games,
-        "pts_total": agg.get("pts_ppr", 0),
+        "position": position, "division": division, "games": total_games,
+        "pts_total": combined_agg.get("pts_ppr", 0),
         "pts_per_game": per_game("pts_ppr"),
         "rec_yd_per_game": per_game("rec_yd"),
-        "rec_total": int(agg.get("rec", 0)),
+        "rec_total": int(combined_agg.get("rec", 0)),
         "rush_yd_per_game": per_game("rush_yd"),
-        "rush_td_total": int(agg.get("rush_td", 0)),
+        "rush_td_total": int(combined_agg.get("rush_td", 0)),
         "pass_yd_per_game": per_game("pass_yd"),
-        "pass_td_total": int(agg.get("pass_td", 0)),
+        "pass_td_total": int(combined_agg.get("pass_td", 0)),
+        "pos_rank_label": pos_rank_label,
+        "year_label": year_label,
     }
-    clue_mode = "season"
+    clue_mode    = "season"
     display_week = None
-    print(f"\nSeason summary: {games} games played")
+
+    print(f"\nSeason summary ({year_label}): {total_games} games played")
     print(f"  {raw['pts_per_game']:.1f} PPR pts/game | "
           f"{raw['rec_yd_per_game']:.0f} rec yd/game | "
           f"{raw['rush_yd_per_game']:.0f} rush yd/game")
+    if pos_rank_label:
+        print(f"  Position rank: {pos_rank_label}")
 
-# ── 3. Generate AI clues ──────────────────────────────────────────────────
-print("\nGenerating clues via Gemini...")
-writer = ClueWriter()
-if clue_mode == "season":
-    clues = writer.generate_season_clues(player_name, raw)
-else:
-    clues = writer.generate_clues(player_name, raw)
+# ── 3. Build stat display lines (shown as bullets on-screen) ─────────────
+def _fmt_stat_lines(r: dict, mode: str, wk) -> list[str]:
+    """Build 4 clean stat strings to display on the video frames."""
+    if mode == "week":
+        pts   = r.get("pts_ppr", 0)
+        rec_y = r.get("rec_yd", 0)
+        catches = int(r.get("rec", 0))
+        rush_y  = int(r.get("rush_yd", 0))
+        rush_a  = int(r.get("rush_att", 0))
+        pass_y  = int(r.get("pass_yd", 0))
+        pass_t  = int(r.get("pass_td", 0))
+        return [
+            f"{pts:.1f} PPR pts  |  Week {wk}",
+            f"{rec_y:.0f} rec yards  |  {catches} catches" if catches else f"{pass_y} pass yards  |  {pass_t} TDs",
+            f"{rush_y} rush yards  |  {rush_a} carries" if rush_a else f"0 rush attempts",
+            r.get("team", "NFL"),
+        ]
+    # Season mode
+    pos_rank = r.get("pos_rank_label", "")
+    div_short = r.get("division", "").replace(" North","").replace(" South","").replace(" East","").replace(" West","")
+    yr = r.get("year_label", "2024")
+    return [
+        f"{r['games']} games  |  {div_short}  ({yr})",
+        f"{r['pts_per_game']:.1f} PPR pts / game",
+        f"{r['rec_yd_per_game']:.0f} rec yd/g  |  {r['rec_total']} catches" if r.get("rec_total") else f"{r.get('pass_yd_per_game',0):.0f} pass yd/g  |  {r.get('pass_td_total',0)} TDs",
+        pos_rank if pos_rank else f"{r['pts_total']:.0f} total PPR pts",
+    ]
 
-print("Clues:")
-for i, c in enumerate(clues, 1):
-    print(f"  {i}. {c}")
+stat_lines = _fmt_stat_lines(raw, clue_mode, display_week)
+print("\nStat lines for video:")
+for i, s in enumerate(stat_lines, 1):
+    print(f"  {i}. {s}")
 
 # ── 4. Player photo ───────────────────────────────────────────────────────
 print("\nFetching player photo...")
@@ -153,11 +235,12 @@ builder = FrameBuilder()
 paths   = builder.build_frames(
     player_id=match_id,
     player_name=player_name,
-    stats=clues,
+    stats=stat_lines,
     silhouette_path=photo_path,
     portrait_path=photo_path,
     week=display_week or 0,
     season=SEASON,
+    position=position,
 )
 print(f"  {len(paths)} frames saved")
 
