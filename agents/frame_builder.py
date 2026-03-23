@@ -12,7 +12,6 @@ Frame layout (8 built, 7 rendered — index 5 skipped in preview_player.py):
 
 Background is transparent (0,0,0,0) — starburst.gif composited by ffmpeg overlay.
 """
-import math
 import os
 from collections import deque
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -27,23 +26,11 @@ _BEBAS = os.path.join(_PROJ_ROOT, "BebasNeue.ttf")
 # ---------------------------------------------------------------------------
 # Colour palette
 # ---------------------------------------------------------------------------
-_POKE_RED       = (204, 0, 0)
-_POKE_RED_LIGHT = (230, 30, 30)
-_POKE_RED_DARK  = (130, 0, 0)
-_BURST_WHITE    = (255, 255, 255)
-_BURST_CYAN     = (140, 220, 240)
-_NAVY           = (30, 45, 90)
-_POKE_YELLOW    = (255, 215, 0)
-_POKE_OUTLINE   = (20, 20, 60)
-_DARK_BG        = (10, 10, 15)
-_WHITE          = (245, 245, 245)
-_GREY           = (160, 160, 175)
-_GOLD           = (255, 190, 50)
-
-_BURST_OUTER_R  = 460
-_BURST_INNER_R  = 350
-_BURST_POINTS   = 24
-_OUTLINE_PX     = 9
+_NAVY         = (30, 45, 90)
+_POKE_YELLOW  = (255, 215, 0)
+_POKE_OUTLINE = (20, 20, 60)
+_WHITE        = (245, 245, 245)
+_OUTLINE_PX   = 9
 
 
 # ---------------------------------------------------------------------------
