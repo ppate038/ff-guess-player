@@ -19,6 +19,54 @@ import tempfile
 import wave
 sys.path.insert(0, os.path.dirname(__file__))
 
+_JINGLE_PATH  = os.path.join(os.path.dirname(__file__), "assets", "whos-that-pokemon.mp3")
+_SPLICE_AT    = 2.54   # seconds — pause right before "Pokémon!" in the original jingle
+
+
+def _build_position_jingle(position: str, tmp_dir: str) -> str | None:
+    """Return path to a spliced jingle: 'Who's that... {POSITION}!'
+
+    Cuts the original MP3 at the pause before 'Pokémon', generates TTS for
+    the position name via gTTS, then concatenates with ffmpeg.
+    Returns None if any step fails (caller falls back to original jingle).
+    """
+    if not os.path.exists(_JINGLE_PATH):
+        return None
+    try:
+        from gtts import gTTS
+    except ImportError:
+        return None
+
+    try:
+        # 1 — Trim jingle: keep "Who's that..." up to the splice point
+        intro = os.path.join(tmp_dir, "jingle_intro.mp3")
+        subprocess.run(
+            [FFMPEG, "-y", "-i", _JINGLE_PATH,
+             "-t", str(_SPLICE_AT), "-c", "copy", intro],
+            check=True, capture_output=True,
+        )
+
+        # 2 — TTS: generate "{POSITION}!" in a hype voice
+        pos_text = f"{position.title()}!"
+        tts_mp3  = os.path.join(tmp_dir, "position_tts.mp3")
+        gTTS(text=pos_text, lang="en", tld="com", slow=False).save(tts_mp3)
+
+        # 3 — Concat intro + TTS with a tiny crossfade
+        concat_txt = os.path.join(tmp_dir, "jingle_concat.txt")
+        with open(concat_txt, "w") as f:
+            f.write(f"file '{intro}'\n")
+            f.write(f"file '{tts_mp3}'\n")
+
+        out = os.path.join(tmp_dir, "position_jingle.mp3")
+        subprocess.run(
+            [FFMPEG, "-y", "-f", "concat", "-safe", "0",
+             "-i", concat_txt, "-c", "copy", out],
+            check=True, capture_output=True,
+        )
+        return out
+    except Exception:
+        return None
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -320,14 +368,15 @@ with tempfile.TemporaryDirectory() as tmp:
     click_wav = os.path.join(tmp, "clicks.wav")
     _build_click_track(click_wav, sum(DURATIONS), clicks)
 
-    _POKEMON_MP3 = os.path.join(os.path.dirname(__file__), "assets", "whos-that-pokemon.mp3")
-    if os.path.exists(_POKEMON_MP3):
-        # Mix click track + Pokemon jingle (jingle at full vol, clicks at 70%)
+    # Build position-specific jingle ("Who's that... Wide Receiver!")
+    jingle = _build_position_jingle(position, tmp) or _JINGLE_PATH
+    if os.path.exists(jingle):
+        # Mix click track + position jingle (jingle at full vol, clicks at 70%)
         subprocess.run(
             [FFMPEG, "-y",
              "-i", silent,
              "-i", click_wav,
-             "-i", _POKEMON_MP3,
+             "-i", jingle,
              "-filter_complex",
              "[1:a]volume=0.7[clicks];[2:a]volume=1.0[jingle];[clicks][jingle]amix=inputs=2:duration=first[a]",
              "-map", "0:v", "-map", "[a]",
